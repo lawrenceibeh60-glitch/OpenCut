@@ -31,6 +31,7 @@ export type ProjectManifest = {
       timelineStartFrame: number
       sourceInFrame: number
       durationFrames: number
+      enabled: boolean
     }>
   }>
   playheadFrame: number
@@ -146,7 +147,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
       if (source.durationFrames > 0 && (durationFrames > source.durationFrames || sourceInFrame > source.durationFrames - durationFrames)) {
         throw new Error('Clip source range exceeds media duration: ' + clipId)
       }
-      return { id: clipId, mediaId, timelineStartFrame, sourceInFrame, durationFrames }
+      return { id: clipId, mediaId, timelineStartFrame, sourceInFrame, durationFrames, enabled: clip.enabled === undefined ? true : booleanValue(clip.enabled, 'Clip enabled state') }
     })
     return {
       id,
