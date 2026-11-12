@@ -377,7 +377,7 @@ mod tests {
 
     #[test]
     fn project_document_rejects_unsupported_version() {
-        let mut project = Project::new("Version", 1920, 1080, FrameRate::FPS_30);
+        let project = Project::new("Version", 1920, 1080, FrameRate::FPS_30);
         let mut document = project.to_document(Frame(0)).unwrap();
         document.version = 99;
         assert_eq!(
