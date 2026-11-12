@@ -60,13 +60,6 @@ function integerValue(value: unknown, label: string, minimum = 0): number {
   return value
 }
 
-function finiteValue(value: unknown, label: string, minimum = 0): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < minimum) {
-    throw new Error(label + ' must be a finite number greater than or equal to ' + minimum)
-  }
-  return value
-}
-
 function booleanValue(value: unknown, label: string): boolean {
   if (typeof value !== 'boolean') throw new Error(label + ' must be a boolean')
   return value
@@ -114,7 +107,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
       id,
       name: stringValue(value.name, 'Media name'),
       kind,
-      size: finiteValue(value.size, 'Media size'),
+      size: integerValue(value.size, 'Media size'),
       durationFrames: value.durationFrames === null || value.durationFrames === undefined ? 0 : integerValue(value.durationFrames, 'Media duration frames'),
       mimeType: typeof value.mimeType === 'string' ? value.mimeType : '',
       locator: stringValue(value.locator, 'Media locator'),
