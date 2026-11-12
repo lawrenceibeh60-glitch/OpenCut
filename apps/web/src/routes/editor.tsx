@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import { framesToSeconds, secondsToFrames, SEQUENCE_FRAME_RATE } from '../lib/timebase'
+import type { RationalFrameRate } from '../lib/timebase'
 import { parseProjectManifest } from '../lib/project-format'
 import {
   AudioLines, ChevronDown, Clapperboard, Film, FolderOpen, ImagePlus, Layers3,
@@ -19,9 +20,9 @@ type TimelineClip = { id: string; mediaId: string; start: number; sourceIn: numb
 type TimelineTrack = { id: string; name: string; kind: 'video' | 'audio' | 'graphics' | 'adjustment'; clips: TimelineClip[]; muted: boolean; locked: boolean }
 
 const createId = () => globalThis.crypto?.randomUUID?.() ?? `kyro-${Date.now()}-${Math.random().toString(16).slice(2)}`
-const formatTime = (seconds: number) => {
+const formatTime = (seconds: number, rate: RationalFrameRate = SEQUENCE_FRAME_RATE) => {
   const safe = Math.max(0, seconds)
-  return `${String(Math.floor(safe / 60)).padStart(2, '0')}:${String(Math.floor(safe % 60)).padStart(2, '0')}:${String(Math.floor((safe % 1) * 30)).padStart(2, '0')}`
+  return `${String(Math.floor(safe / 60)).padStart(2, '0')}:${String(Math.floor(safe % 60)).padStart(2, '0')}:${String(Math.floor((safe % 1) * rate.numerator / rate.denominator)).padStart(2, '0')}`
 }
 const mediaKind = (file: File): MediaKind | null => file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('image/') ? 'image' : null
 
@@ -38,6 +39,7 @@ function Editor() {
   const [activeTab, setActiveTab] = useState<'media' | 'effects' | 'text'>('media')
   const [projectName, setProjectName] = useState('Untitled project')
   const [projectId, setProjectId] = useState(createId())
+  const [projectFrameRate, setProjectFrameRate] = useState<RationalFrameRate>(SEQUENCE_FRAME_RATE)
   const [notice, setNotice] = useState('Import media to begin editing')
   const fileInput = useRef<HTMLInputElement>(null)
   const projectInput = useRef<HTMLInputElement>(null)
@@ -94,7 +96,7 @@ function Editor() {
       target = { id, name: `${targetKind === 'audio' ? 'A' : 'V'}${tracks.filter((track) => track.kind === targetKind).length + 1}`, kind: targetKind, clips: [], muted: false, locked: false }
       setTracks((current) => [...current, target!])
     }
-    const clip: TimelineClip = { id: createId(), mediaId: asset.id, start: playhead, sourceIn: 0, duration: Math.max(framesToSeconds(1, SEQUENCE_FRAME_RATE), asset.duration), enabled: true }
+    const clip: TimelineClip = { id: createId(), mediaId: asset.id, start: playhead, sourceIn: 0, duration: Math.max(framesToSeconds(1, projectFrameRate), asset.duration), enabled: true }
     setTracks((current) => current.map((track) => track.id === target!.id ? { ...track, clips: [...track.clips, clip] } : track))
     setSelectedClipId(clip.id)
     setNotice(`Added ${asset.name} to ${target.name}`)
@@ -134,7 +136,7 @@ function Editor() {
       ? targetTrack.kind === 'audio'
       : targetTrack.kind === 'video' || (asset.kind === 'image' && targetTrack.kind === 'graphics')
     if (!compatible) { setNotice('That media type cannot be placed on this track'); return }
-    const snappedStart = framesToSeconds(secondsToFrames(Math.max(0, startSeconds), SEQUENCE_FRAME_RATE), SEQUENCE_FRAME_RATE)
+    const snappedStart = framesToSeconds(secondsToFrames(Math.max(0, startSeconds), projectFrameRate), projectFrameRate)
     setTracks((current) => current.map((track) => {
       if (track.id === sourceTrack.id && track.id === targetTrack.id) {
         return { ...track, clips: [...track.clips.filter((item) => item.id !== clipId), { ...clip, start: snappedStart }].sort((a, b) => a.start - b.start) }
@@ -156,7 +158,7 @@ function Editor() {
       return
     }
     const oneFrame = framesToSeconds(1, SEQUENCE_FRAME_RATE)
-    const splitOffset = framesToSeconds(secondsToFrames(relativePlayhead, SEQUENCE_FRAME_RATE), SEQUENCE_FRAME_RATE)
+    const splitOffset = framesToSeconds(secondsToFrames(relativePlayhead, projectFrameRate), projectFrameRate)
     if (splitOffset < oneFrame || splitOffset > selectedClip.duration - oneFrame) {
       setNotice('Move the playhead inside the selected clip to split it')
       return
@@ -187,10 +189,10 @@ function Editor() {
   const saveProject = () => {
     const project = {
       format: 'kyrocut-project', version: 1, application: 'KYROCUT X1', id: projectId, name: projectName,
-      frameRate: SEQUENCE_FRAME_RATE, resolution: { width: 1920, height: 1080 },
-      media: assets.map(({ id, name, kind, size, duration, durationKnown, mimeType }) => ({ id, name, kind, size, durationFrames: durationKnown ? secondsToFrames(duration, SEQUENCE_FRAME_RATE) : null, mimeType, locator: `media/${name}` })),
-      tracks: tracks.map((track) => ({ ...track, clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, timelineStartFrame: secondsToFrames(clip.start, SEQUENCE_FRAME_RATE), sourceInFrame: secondsToFrames(clip.sourceIn, SEQUENCE_FRAME_RATE), durationFrames: Math.max(1, secondsToFrames(clip.duration, SEQUENCE_FRAME_RATE)), enabled: clip.enabled })) })),
-      playheadFrame: secondsToFrames(playhead, SEQUENCE_FRAME_RATE),
+      frameRate: projectFrameRate, resolution: { width: 1920, height: 1080 },
+      media: assets.map(({ id, name, kind, size, duration, durationKnown, mimeType }) => ({ id, name, kind, size, durationFrames: durationKnown ? secondsToFrames(duration, projectFrameRate) : null, mimeType, locator: `media/${name}` })),
+      tracks: tracks.map((track) => ({ ...track, clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, timelineStartFrame: secondsToFrames(clip.start, projectFrameRate), sourceInFrame: secondsToFrames(clip.sourceIn, projectFrameRate), durationFrames: Math.max(1, secondsToFrames(clip.duration, projectFrameRate)), enabled: clip.enabled })) })),
+      playheadFrame: secondsToFrames(playhead, projectFrameRate),
     }
     const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -209,6 +211,7 @@ function Editor() {
         return
       }
       const frameRate = manifest.frameRate?.numerator && manifest.frameRate?.denominator ? manifest.frameRate : SEQUENCE_FRAME_RATE
+      setProjectFrameRate(frameRate)
       setAssets(manifest.media.map((asset) => ({ id: asset.id, name: asset.name, kind: asset.kind, url: '', size: asset.size ?? 0, duration: framesToSeconds(asset.durationFrames ?? 0, frameRate), durationKnown: asset.durationFrames !== null, mimeType: asset.mimeType ?? '', missing: true })))
       setTracks(manifest.tracks.map((track) => ({
         id: track.id, name: track.name, kind: track.kind, muted: Boolean(track.muted), locked: Boolean(track.locked),
@@ -340,9 +343,9 @@ function Editor() {
             </div>
             <div className="kx-transport">
               <button className="kx-icon-button" title="Play or pause" onClick={togglePlayback}>{playing ? <Pause size={17} /> : <Play size={17} />}</button>
-              <span className="kx-timecode">{formatTime(playhead)}</span>
+              <span className="kx-timecode">{formatTime(playhead, projectFrameRate)}</span>
               <input aria-label="Timeline playhead" type="range" min="0" max={projectDuration} step="0.01" value={Math.min(playhead, projectDuration)} onChange={(event) => setPlayhead(Number(event.target.value))} />
-              <span className="kx-timecode">{formatTime(projectDuration)}</span>
+              <span className="kx-timecode">{formatTime(projectDuration, projectFrameRate)}</span>
               <button className="kx-icon-button" title="Viewer settings" onClick={() => setNotice('Viewer settings are reserved for playback quality and display controls.')}><Settings2 size={16} /></button>
             </div>
           </div>
@@ -357,7 +360,7 @@ function Editor() {
               </div>
             </div>
             <div className="kx-ruler-row"><div className="kx-track-gutter">TRACKS</div><div className="kx-ruler">
-              {Array.from({ length: Math.ceil(projectDuration / 5) + 1 }, (_, index) => <span key={index} style={{ left: `${index * 5 * 12}px` }}>{formatTime(index * 5)}</span>)}
+              {Array.from({ length: Math.ceil(projectDuration / 5) + 1 }, (_, index) => <span key={index} style={{ left: `${index * 5 * 12}px` }}>{formatTime(index * 5, projectFrameRate)}</span>)}
               <div className="kx-playhead" style={{ left: `${playhead * 12}px` }} />
             </div></div>
             <div className="kx-track-scroll">
