@@ -8,7 +8,7 @@ import { getMediaBlob, saveMediaBlob } from '../lib/media-storage'
 import { decodeProjectArchive, encodeProjectArchive, isProjectArchive } from '../lib/project-archive'
 import {
   AudioLines, ChevronDown, Clapperboard, Film, FolderOpen, ImagePlus, Layers3,
-  Minus, Music2, Pause, Play, Plus, Save, Scissors, Settings2, Sparkles, Trash2,
+  Minus, Music2, Pause, Play, Plus, Save, Scissors, Settings2, Sparkles, StepBack, StepForward, Trash2,
   Upload, Video, Volume2, WandSparkles,
 } from 'lucide-react'
 import './editor.css'
@@ -115,6 +115,14 @@ function Editor() {
 
   const allClips = useMemo(() => tracks.flatMap((track) => track.clips.map((clip) => ({ ...clip, trackId: track.id }))), [tracks])
   const selectedClip = allClips.find((clip) => clip.id === selectedClipId) ?? null
+  useEffect(() => {
+    const active = tracks.flatMap((track, trackIndex) => track.muted ? [] : track.clips
+      .filter((clip) => clip.enabled && playhead >= clip.start && playhead < clip.start + clip.duration)
+      .map((clip) => ({ clip, trackIndex, kind: track.kind })))
+      .sort((a, b) => b.trackIndex - a.trackIndex)
+    const candidate = active.find((item) => item.kind === 'video' || item.kind === 'graphics') ?? active.find((item) => item.kind === 'audio')
+    if (candidate && candidate.clip.id !== selectedClipId) setSelectedClipId(candidate.clip.id)
+  }, [playhead, tracks, selectedClipId])
   const selectedAsset = assets.find((asset) => asset.id === selectedClip?.mediaId) ?? null
   const projectDuration = Math.max(30, ...allClips.filter((clip) => clip.enabled).map((clip) => clip.start + clip.duration))
   const selectedTrack = tracks.find((track) => track.clips.some((clip) => clip.id === selectedClipId))
@@ -410,6 +418,11 @@ function Editor() {
       setNotice('No matching filenames found. Rename the source files or import them individually.')
     }
   }
+  const stepPlayhead = (direction: -1 | 1) => {
+    const frame = framesToSeconds(1, projectFrameRate)
+    setPlaying(false)
+    setPlayhead((current) => Math.max(0, Math.min(projectDuration, current + direction * frame)))
+  }
   const togglePlayback = () => {
     if (!selectedClip || !selectedAsset) { setNotice('Select a timeline clip to preview it'); return }
     if (!selectedClip.enabled) { setNotice('This clip is disabled. Enable it in the inspector before previewing.'); return }
@@ -526,7 +539,7 @@ function Editor() {
                     <div className="kx-preview-empty"><div className="kx-preview-logo"><Clapperboard size={32} /></div><strong>KYROCUT X1</strong><span>CREATIVE VIEWPORT</span><small>Select a clip to preview your composition</small></div>}
             </div>
             <div className="kx-transport">
-              <button className="kx-icon-button" title="Play or pause" onClick={togglePlayback}>{playing ? <Pause size={17} /> : <Play size={17} />}</button>
+              <button className="kx-icon-button" title="Previous frame" onClick={() => stepPlayhead(-1)}><StepBack size={15} /></button><button className="kx-icon-button" title="Play or pause" onClick={togglePlayback}>{playing ? <Pause size={17} /> : <Play size={17} />}</button><button className="kx-icon-button" title="Next frame" onClick={() => stepPlayhead(1)}><StepForward size={15} /></button>
               <span className="kx-timecode">{formatTime(playhead, projectFrameRate)}</span>
               <input aria-label="Timeline playhead" type="range" min="0" max={projectDuration} step={framesToSeconds(1, projectFrameRate)} value={Math.min(playhead, projectDuration)} onChange={(event) => setPlayhead(Number(event.target.value))} />
               <span className="kx-timecode">{formatTime(projectDuration, projectFrameRate)}</span>
