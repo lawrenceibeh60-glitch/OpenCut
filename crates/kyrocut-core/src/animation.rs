@@ -94,7 +94,10 @@ impl ScalarCurve {
         for pair in self.keyframes.windows(2) {
             let left = pair[0];
             let right = pair[1];
-            if frame >= left.frame && frame <= right.frame {
+            if frame == right.frame {
+                return Some(right.value);
+            }
+            if frame >= left.frame && frame < right.frame {
                 let span = right.frame.0 - left.frame.0;
                 let progress = (frame.0 - left.frame.0) as f64 / span as f64;
                 let amount = match left.interpolation {
