@@ -7,7 +7,7 @@ KYROCUT X1 has two first-class clients:
 - Web client: browser-native media access, preview, interaction and supported browser rendering.
 - Desktop client: native media access, native GPU integration, local project storage and high-throughput rendering.
 
-Neither client owns a separate project format or editing model. Both consume the shared creative-core domain model and versioned project contract.
+Neither client owns a separate project format. Both target the same versioned project contract. The native package links the Rust core; the browser currently uses a TypeScript validator for that contract. A WASM bridge is still required before both clients execute the same Rust edit engine.
 
 ## Repository boundaries
 
@@ -59,7 +59,7 @@ Owns sample-accurate scheduling, mixing, gain automation, effects and output dev
 
 ### Client adapters
 
-Translate UI gestures and native/browser events into shared edit commands. Platform-specific code must not fork project semantics.
+Translate UI gestures and native/browser events into shared edit commands. Platform-specific code must not fork project semantics. The browser-to-Rust WASM adapter and native GPUI panel wiring are not implemented yet.
 
 ## First vertical slice
 
