@@ -196,11 +196,11 @@ async function main() {
   const target = option("--target") ? parsePlatform(option("--target")!) : host;
   const key = keyOf(target);
   const prebuilt = (manifest.platforms as Record<string, Download | undefined>)[key];
-  const fromSource = process.argv.includes("--from-source") || key !== keyOf(host) || !prebuilt;
+  let fromSource = process.argv.includes("--from-source") || key !== keyOf(host) || !prebuilt;
 
   // What this build is made of: a different pin or recipe rebuilds it.
-  const flags = fromSource ? configureFlags(target, host) : [];
-  const stamp = fromSource
+  let flags = fromSource ? configureFlags(target, host) : [];
+  let stamp = fromSource
     ? `source ${manifest.source.sha256} ${createHash("sha256").update(flags.join(" ")).digest("hex")}`
     : `prebuilt ${prebuilt!.sha256}`;
 
@@ -216,9 +216,28 @@ async function main() {
   const staging = `${destination}.partial`;
   rmSync(staging, { recursive: true, force: true });
   mkdirSync(staging, { recursive: true });
-  const built = fromSource
-    ? await buildFromSource(staging, target, flags)
-    : await installPrebuilt(prebuilt!, staging);
+  let built: string;
+  if (fromSource) {
+    built = await buildFromSource(staging, target, flags);
+  } else {
+    try {
+      built = await installPrebuilt(prebuilt!, staging);
+    } catch (error) {
+      // Prebuilt release URLs can be retired independently of this manifest.
+      // The source archive is checksum-pinned, so fall back to the exact LGPL
+      // source rather than leaving every media-engine CI run blocked.
+      console.warn(
+        `prebuilt FFmpeg unavailable for ${key}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      console.warn(`falling back to pinned FFmpeg ${manifest.version} source build`);
+      rmSync(staging, { recursive: true, force: true });
+      mkdirSync(staging, { recursive: true });
+      fromSource = true;
+      flags = configureFlags(target, host);
+      stamp = `source ${manifest.source.sha256} ${createHash("sha256").update(flags.join(" ")).digest("hex")}`;
+      built = await buildFromSource(staging, target, flags);
+    }
+  }
 
   rmSync(destination, { recursive: true, force: true });
   renameSync(built, destination);

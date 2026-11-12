@@ -15,7 +15,7 @@ function Home() {
     <main className="kx-home">
       <header className="kx-home-nav">
         <a className="kx-home-brand" href="/"><span><Clapperboard size={18} /></span> KYROCUT <b>X1</b></a>
-        <div className="kx-home-nav-right"><span>CREATIVE PRODUCTION SYSTEM</span><Link to="/editor" className="kx-home-open">Open editor <ArrowUpRight size={15} /></Link></div>
+        <div className="kx-home-nav-right"><span>CREATIVE PRODUCTION SYSTEM</span><Link to="/compositor" className="kx-home-open">Compositor <ArrowUpRight size={15} /></Link><Link to="/editor" className="kx-home-open">Open editor <ArrowUpRight size={15} /></Link></div>
       </header>
       <section className="kx-hero">
         <div className="kx-hero-copy">

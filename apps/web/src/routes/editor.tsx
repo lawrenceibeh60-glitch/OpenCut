@@ -25,6 +25,7 @@ const formatTime = (seconds: number, rate: RationalFrameRate = SEQUENCE_FRAME_RA
   return `${String(Math.floor(safe / 60)).padStart(2, '0')}:${String(Math.floor(safe % 60)).padStart(2, '0')}:${String(Math.floor((safe % 1) * rate.numerator / rate.denominator)).padStart(2, '0')}`
 }
 const mediaKind = (file: File): MediaKind | null => file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('image/') ? 'image' : null
+const formatFrameRate = (rate: RationalFrameRate) => `${Number((rate.numerator / rate.denominator).toFixed(3))} FPS`
 
 function Editor() {
   const [assets, setAssets] = useState<MediaAsset[]>([])
@@ -38,10 +39,11 @@ function Editor() {
   const [playing, setPlaying] = useState(false)
   const [activeTab, setActiveTab] = useState<'media' | 'effects' | 'text'>('media')
   const [projectName, setProjectName] = useState('Untitled project')
-  const [projectId, setProjectId] = useState(createId())
+  const [projectId, setProjectId] = useState<string>(createId())
   const [projectFrameRate, setProjectFrameRate] = useState<RationalFrameRate>(SEQUENCE_FRAME_RATE)
   const [projectResolution, setProjectResolution] = useState({ width: 1920, height: 1080 })
   const [notice, setNotice] = useState('Import media to begin editing')
+  const [recoveryReady, setRecoveryReady] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const projectInput = useRef<HTMLInputElement>(null)
   const relinkInput = useRef<HTMLInputElement>(null)
@@ -50,12 +52,78 @@ function Editor() {
   const objectUrls = useRef<string[]>([])
   useEffect(() => () => objectUrls.current.forEach((url) => URL.revokeObjectURL(url)), [])
 
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('kyrocut-x1:recovery')
+      if (saved) {
+        const manifest = parseProjectManifest(saved)
+        if (manifest.format === 'kyrocut-project' && manifest.version === 1 && Array.isArray(manifest.media) && Array.isArray(manifest.tracks)) {
+          const frameRate = manifest.frameRate?.numerator && manifest.frameRate?.denominator ? manifest.frameRate : SEQUENCE_FRAME_RATE
+          setProjectFrameRate(frameRate)
+          setProjectResolution(manifest.resolution)
+          setAssets(manifest.media.map((asset) => ({
+            id: asset.id, name: asset.name, kind: asset.kind, url: '',
+            size: asset.size ?? 0, duration: framesToSeconds(asset.durationFrames ?? 0, frameRate),
+            durationKnown: asset.durationFrames !== null, mimeType: asset.mimeType ?? '', missing: true,
+          })))
+          setTracks(manifest.tracks.map((track) => ({
+            id: track.id, name: track.name, kind: track.kind,
+            muted: Boolean(track.muted), locked: Boolean(track.locked),
+            clips: track.clips.map((clip) => ({
+              id: clip.id, mediaId: clip.mediaId,
+              start: framesToSeconds(clip.timelineStartFrame, frameRate),
+              sourceIn: framesToSeconds(clip.sourceInFrame, frameRate),
+              duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled,
+            })),
+          })))
+          setProjectId(manifest.id ?? createId())
+          setProjectName(manifest.name || 'Recovered project')
+          setPlayhead(framesToSeconds(manifest.playheadFrame ?? 0, frameRate))
+          setNotice('Recovered the latest local project snapshot. Relink source media to preview.')
+        }
+      }
+    } catch {
+      setNotice('Local recovery snapshot could not be read; starting a fresh project.')
+    } finally {
+      setRecoveryReady(true)
+    }
+  }, [])
+
   const allClips = useMemo(() => tracks.flatMap((track) => track.clips.map((clip) => ({ ...clip, trackId: track.id }))), [tracks])
   const selectedClip = allClips.find((clip) => clip.id === selectedClipId) ?? null
   const selectedAsset = assets.find((asset) => asset.id === selectedClip?.mediaId) ?? null
   const projectDuration = Math.max(30, ...allClips.filter((clip) => clip.enabled).map((clip) => clip.start + clip.duration))
   const selectedTrack = tracks.find((track) => track.clips.some((clip) => clip.id === selectedClipId))
   const missingAssets = assets.filter((asset) => !asset.url)
+
+  const projectDocument = useMemo(() => ({
+    format: 'kyrocut-project', version: 1, application: 'KYROCUT X1',
+    id: projectId, name: projectName, frameRate: projectFrameRate, resolution: projectResolution,
+    media: assets.map(({ id, name, kind, size, duration, durationKnown, mimeType }) => ({
+      id, name, kind, size, durationFrames: durationKnown ? secondsToFrames(duration, projectFrameRate) : null,
+      mimeType, locator: `media/${name}`,
+    })),
+    tracks: tracks.map((track) => ({
+      ...track,
+      clips: track.clips.map((clip) => ({
+        id: clip.id, mediaId: clip.mediaId,
+        timelineStartFrame: secondsToFrames(clip.start, projectFrameRate),
+        sourceInFrame: secondsToFrames(clip.sourceIn, projectFrameRate),
+        durationFrames: Math.max(1, secondsToFrames(clip.duration, projectFrameRate)),
+        enabled: clip.enabled,
+      })),
+    })),
+    playheadFrame: secondsToFrames(playhead, projectFrameRate),
+  }), [assets, playhead, projectFrameRate, projectId, projectName, projectResolution, tracks])
+
+  useEffect(() => {
+    if (!recoveryReady) return
+    try {
+      localStorage.setItem('kyrocut-x1:recovery', JSON.stringify(projectDocument))
+    } catch {
+      setNotice('Automatic recovery storage is full or unavailable. Save a .kcx1 project file manually.')
+    }
+  }, [projectDocument, recoveryReady])
 
   useEffect(() => {
     const sourceTime = selectedClip ? selectedClip.sourceIn + Math.max(0, playhead - selectedClip.start) : 0
@@ -188,14 +256,7 @@ function Editor() {
     setTracks((current) => [...current, { id: createId(), name: `${prefix}${number}`, kind, clips: [], muted: false, locked: false }])
   }
   const saveProject = () => {
-    const project = {
-      format: 'kyrocut-project', version: 1, application: 'KYROCUT X1', id: projectId, name: projectName,
-      frameRate: projectFrameRate, resolution: projectResolution,
-      media: assets.map(({ id, name, kind, size, duration, durationKnown, mimeType }) => ({ id, name, kind, size, durationFrames: durationKnown ? secondsToFrames(duration, projectFrameRate) : null, mimeType, locator: `media/${name}` })),
-      tracks: tracks.map((track) => ({ ...track, clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, timelineStartFrame: secondsToFrames(clip.start, projectFrameRate), sourceInFrame: secondsToFrames(clip.sourceIn, projectFrameRate), durationFrames: Math.max(1, secondsToFrames(clip.duration, projectFrameRate)), enabled: clip.enabled })) })),
-      playheadFrame: secondsToFrames(playhead, projectFrameRate),
-    }
-    const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' })
+    const blob = new Blob([JSON.stringify(projectDocument, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
@@ -297,6 +358,7 @@ function Editor() {
         <a className="kx-brand" href="/" aria-label="KYROCUT X1 home"><span className="kx-brand-mark"><Clapperboard size={19} /></span><span>KYROCUT <b>X1</b></span></a>
         <div className="kx-project-title"><input aria-label="Project name" value={projectName} onChange={(event) => setProjectName(event.target.value)} /><span className="kx-save-state">LOCAL PROJECT</span></div>
         <div className="kx-top-actions">
+          <a className="kx-button kx-button-quiet" href="/compositor">Compositor</a>
           <button className="kx-button kx-button-quiet" onClick={() => projectInput.current?.click()}><FolderOpen size={15} /> Open</button>
           <input ref={projectInput} hidden type="file" accept=".kcx1,application/json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openProject(file); event.target.value = '' }} />
           <button className="kx-button kx-button-quiet" onClick={saveProject}><Save size={15} /> Save project</button>
@@ -336,7 +398,7 @@ function Editor() {
 
         <section className="kx-center-column">
           <div className="kx-preview-panel">
-            <div className="kx-panel-title"><span>COMPOSITION VIEWER</span><span>1920 × 1080 <i>·</i> 30 FPS</span></div>
+            <div className="kx-panel-title"><span>COMPOSITION VIEWER</span><span>{projectResolution.width} × {projectResolution.height} <i>·</i> {formatFrameRate(projectFrameRate)}</span></div>
             <div className="kx-preview-stage">
               {selectedAsset && !selectedAsset.url ? <div className="kx-preview-empty"><FolderOpen size={30} /><strong>MEDIA OFFLINE</strong><span>RELINK THE SOURCE FILE TO PREVIEW</span></div> : selectedAsset?.kind === 'video' ? <video ref={videoRef} src={selectedAsset.url} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onTimeUpdate={(event) => { if (selectedClip) { const elapsed = event.currentTarget.currentTime - selectedClip.sourceIn; const clamped = Math.min(selectedClip.duration, Math.max(0, elapsed)); setPlayhead(selectedClip.start + clamped); if (elapsed >= selectedClip.duration) { event.currentTarget.pause(); setPlaying(false) } } }} controls={false} /> :
                 selectedAsset?.kind === 'image' ? <img src={selectedAsset.url} alt={selectedAsset.name} /> :
@@ -358,7 +420,7 @@ function Editor() {
                 <button onClick={() => addTrack('video')} title="Add video track"><Plus size={14} /> Video</button>
                 <button onClick={() => addTrack('audio')} title="Add audio track"><Plus size={14} /> Audio</button>
                 <button onClick={() => addTrack('graphics')} title="Add graphics track"><Plus size={14} /> Graphics</button>
-                <button className="kx-icon-button" title="Timeline options" onClick={() => setNotice('Timeline options: frame-accurate editing is enabled at 30 FPS.')}><ChevronDown size={15} /></button>
+                <button className="kx-icon-button" title="Timeline options" onClick={() => setNotice(`Timeline options: frame-accurate editing is enabled at ${formatFrameRate(projectFrameRate)}.`)}><ChevronDown size={15} /></button>
               </div>
             </div>
             <div className="kx-ruler-row"><div className="kx-track-gutter">TRACKS</div><div className="kx-ruler">
@@ -383,7 +445,7 @@ function Editor() {
               </div>)}
               <div className="kx-playhead-line" style={{ left: `calc(176px + ${playhead * 12}px)` }} />
             </div>
-            <div className="kx-timeline-footer"><span>{tracks.length} TRACKS</span><span>{allClips.length} CLIPS</span><span>{assets.length} ASSETS</span><span className="kx-footer-spacer" /><span>30 FPS</span></div>
+            <div className="kx-timeline-footer"><span>{tracks.length} TRACKS</span><span>{allClips.length} CLIPS</span><span>{assets.length} ASSETS</span><span className="kx-footer-spacer" /><span>{formatFrameRate(projectFrameRate)}</span></div>
           </div>
         </section>
 
@@ -400,7 +462,7 @@ function Editor() {
             <button className="kx-delete-clip" onClick={removeSelectedClip}><Trash2 size={14} /> Remove clip</button>
             <div className="kx-section-label">SOURCE DETAILS</div>
             <div className="kx-detail-row"><span>File size</span><strong>{(selectedAsset.size / (1024 * 1024)).toFixed(2)} MB</strong></div>
-            <div className="kx-detail-row"><span>Frame rate</span><strong>30 FPS sequence</strong></div>
+            <div className="kx-detail-row"><span>Frame rate</span><strong>{formatFrameRate(projectFrameRate)}</strong></div>
             <div className="kx-detail-row"><span>Track</span><strong>{selectedTrack?.name ?? '—'}</strong></div>
           </div> : <div className="kx-inspector-empty"><Settings2 size={25} /><strong>No selection</strong><span>Select a clip on the timeline to inspect its timing and source properties.</span></div>}
         </aside>

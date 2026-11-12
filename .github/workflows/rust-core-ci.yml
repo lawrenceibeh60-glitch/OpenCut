@@ -1,0 +1,71 @@
+name: KYROCUT X1 Rust Core
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - ".github/workflows/rust-core-ci.yml"
+  push:
+    branches:
+      - main
+      - "feat/kyrocut-x1-*"
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - ".github/workflows/rust-core-ci.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kyrocut-rust-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: Format, media, render and audio tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Install FFmpeg development libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config clang libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Resolve workspace lockfile
+        run: cargo generate-lockfile
+
+      - name: Format Rust workspace
+        run: cargo fmt --all
+
+      - name: Commit formatting and lockfile updates when needed
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -u
+            git commit -m "chore(ci): refresh Rust lockfile and formatting"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
+
+      - name: Test shared project, media, render and audio crates
+        run: cargo test -p kyrocut-core -p kyrocut-render -p kyrocut-audio -p kyrocut-media --all-targets
+
+      - name: Lint shared project, media, render and audio crates
+        run: cargo clippy -p kyrocut-core -p kyrocut-render -p kyrocut-audio -p kyrocut-media --all-targets -- -D warnings
