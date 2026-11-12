@@ -18,6 +18,6 @@ impl Render for Inspector {
             .border_color(colors.border)
             .bg(colors.card)
             .text_color(colors.card_foreground)
-            .child("Inspector")
+            .child("PROPERTIES INSPECTOR")
     }
 }
