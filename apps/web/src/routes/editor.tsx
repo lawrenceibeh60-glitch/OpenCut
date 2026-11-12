@@ -128,6 +128,7 @@ function Editor() {
     const clip = sourceTrack?.clips.find((item) => item.id === clipId)
     const asset = assets.find((item) => item.id === clip?.mediaId)
     if (!sourceTrack || !targetTrack || !clip || !asset) return
+    if (sourceTrack.locked) { setNotice('Unlock the source track before moving this clip'); return }
     if (targetTrack.locked) { setNotice('That track is locked'); return }
     const compatible = asset.kind === 'audio'
       ? targetTrack.kind === 'audio'
