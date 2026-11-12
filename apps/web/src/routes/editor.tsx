@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import { framesToSeconds, secondsToFrames, SEQUENCE_FRAME_RATE } from '../lib/timebase'
+import { parseProjectManifest } from '../lib/project-format'
 import {
   AudioLines, ChevronDown, Clapperboard, Film, FolderOpen, ImagePlus, Layers3,
   Minus, Music2, Pause, Play, Plus, Save, Scissors, Settings2, Sparkles, Trash2,
@@ -16,7 +17,6 @@ type MediaKind = 'video' | 'audio' | 'image'
 type MediaAsset = { id: string; name: string; kind: MediaKind; url: string; size: number; duration: number; mimeType: string; missing?: boolean }
 type TimelineClip = { id: string; mediaId: string; start: number; sourceIn: number; duration: number }
 type TimelineTrack = { id: string; name: string; kind: 'video' | 'audio' | 'graphics'; clips: TimelineClip[]; muted: boolean; locked: boolean }
-type ProjectManifest = { format: string; version: number; name: string; frameRate: { numerator: number; denominator: number }; media: Array<{ id: string; name: string; kind: MediaKind; size: number; durationFrames: number; mimeType: string }>; tracks: Array<{ id: string; name: string; kind: TimelineTrack['kind']; muted: boolean; locked: boolean; clips: Array<{ id: string; mediaId: string; timelineStartFrame: number; sourceInFrame: number; durationFrames: number }> }>; playheadFrame: number }
 
 const createId = () => globalThis.crypto?.randomUUID?.() ?? `kyro-${Date.now()}-${Math.random().toString(16).slice(2)}`
 const formatTime = (seconds: number) => {
@@ -166,7 +166,7 @@ function Editor() {
   }
   const openProject = async (file: File) => {
     try {
-      const manifest = JSON.parse(await file.text()) as ProjectManifest
+      const manifest = parseProjectManifest(await file.text())
       if (manifest.format !== 'kyrocut-project' || manifest.version !== 1 || !Array.isArray(manifest.media) || !Array.isArray(manifest.tracks)) {
         setNotice('This is not a supported KYROCUT X1 project file')
         return
