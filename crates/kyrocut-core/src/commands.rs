@@ -177,6 +177,42 @@ mod tests {
     }
 
     #[test]
+    fn add_and_remove_track_updates_project_structure() {
+        let mut project = project_with_clip();
+        project.apply_edit(EditCommand::AddTrack {
+            track: Track {
+                id: "audio-1".into(), name: "A1".into(), kind: TrackKind::Audio,
+                muted: false, locked: false, clips: Vec::new(),
+            },
+        }).unwrap();
+        assert_eq!(project.tracks.len(), 2);
+        project.apply_edit(EditCommand::RemoveTrack { track_id: "audio-1".into() }).unwrap();
+        assert_eq!(project.tracks.len(), 1);
+    }
+
+    #[test]
+    fn clip_enabled_command_changes_render_participation() {
+        let mut project = project_with_clip();
+        project.apply_edit(EditCommand::SetClipEnabled { clip_id: "clip-1".into(), enabled: false }).unwrap();
+        assert!(project.active_clips_at(Frame(10)).is_empty());
+    }
+
+    #[test]
+    fn add_and_remove_unreferenced_media() {
+        let mut project = project_with_clip();
+        project.apply_edit(EditCommand::AddMedia {
+            media: MediaReference {
+                id: "media-2".into(), name: "music.wav".into(), kind: crate::MediaKind::Audio,
+                size_bytes: 2048, mime_type: "audio/wav".into(),
+                locator: "media/music.wav".into(), duration_frames: Some(300),
+            },
+        }).unwrap();
+        assert_eq!(project.media.len(), 2);
+        project.apply_edit(EditCommand::RemoveMedia { media_id: "media-2".into() }).unwrap();
+        assert_eq!(project.media.len(), 1);
+    }
+
+    #[test]
     fn removing_referenced_media_rolls_back() {
         let mut project = project_with_clip();
         let before = project.clone();
