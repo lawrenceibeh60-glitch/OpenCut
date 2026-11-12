@@ -9,6 +9,12 @@ pub enum EditCommand {
     SetClipEnabled { clip_id: String, enabled: bool },
 }
 
+enum ClipUpdate {
+    Move(Frame),
+    Trim(Frame, u64),
+    SetEnabled(bool),
+}
+
 impl Project {
     /// Apply an edit atomically. Invalid edits leave the project unchanged.
     pub fn apply_edit(&mut self, command: EditCommand) -> Result<(), ProjectError> {
@@ -21,28 +27,26 @@ impl Project {
     }
 
     fn apply_edit_inner(&mut self, command: EditCommand) -> Result<(), ProjectError> {
-        let (clip_id, update): (&str, Box<dyn FnOnce(&mut Clip)>) = match command {
-            EditCommand::MoveClip { clip_id, timeline_start } => {
-                (Box::leak(clip_id.into_boxed_str()), Box::new(move |clip| clip.timeline_start = timeline_start))
-            }
-            EditCommand::TrimClip { clip_id, source_in, duration_frames } => {
-                (Box::leak(clip_id.into_boxed_str()), Box::new(move |clip| {
-                    clip.source_in = source_in;
-                    clip.duration_frames = duration_frames;
-                }))
-            }
-            EditCommand::SetClipEnabled { clip_id, enabled } => {
-                (Box::leak(clip_id.into_boxed_str()), Box::new(move |clip| clip.enabled = enabled))
-            }
+        let (clip_id, update) = match command {
+            EditCommand::MoveClip { clip_id, timeline_start } => (clip_id, ClipUpdate::Move(timeline_start)),
+            EditCommand::TrimClip { clip_id, source_in, duration_frames } => (clip_id, ClipUpdate::Trim(source_in, duration_frames)),
+            EditCommand::SetClipEnabled { clip_id, enabled } => (clip_id, ClipUpdate::SetEnabled(enabled)),
         };
 
         for track in &mut self.tracks {
             if let Some(clip) = track.clips.iter_mut().find(|clip| clip.id == clip_id) {
-                update(clip);
+                match update {
+                    ClipUpdate::Move(start) => clip.timeline_start = start,
+                    ClipUpdate::Trim(source_in, duration) => {
+                        clip.source_in = source_in;
+                        clip.duration_frames = duration;
+                    }
+                    ClipUpdate::SetEnabled(enabled) => clip.enabled = enabled,
+                }
                 return Ok(());
             }
         }
-        Err(ProjectError::UnknownClip(clip_id.to_owned()))
+        Err(ProjectError::UnknownClip(clip_id))
     }
 }
 
