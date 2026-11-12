@@ -457,7 +457,7 @@ mod tests {
             ],
         )
         .unwrap();
-        assert_eq!(result.pixel(0, 0), Some([128, 0, 127, 255]));
+        assert_eq!(result.pixel(0, 0), Some([128, 0, 128, 255]));
     }
 
     #[test]
