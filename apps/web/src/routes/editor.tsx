@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import { framesToSeconds, secondsToFrames, SEQUENCE_FRAME_RATE } from '../lib/timebase'
 import type { RationalFrameRate } from '../lib/timebase'
-import { parseProjectManifest } from '../lib/project-format'
+import { parseProjectManifest, type ProjectManifest } from '../lib/project-format'
 import { getMediaBlob, saveMediaBlob } from '../lib/media-storage'
 import { decodeProjectArchive, encodeProjectArchive, isProjectArchive } from '../lib/project-archive'
 import {
@@ -306,7 +306,7 @@ function Editor() {
         if (blob) bundledMedia.set(asset.id, blob)
         else unavailable += 1
       }
-      const archive = await encodeProjectArchive(projectDocument, bundledMedia)
+      const archive = await encodeProjectArchive(projectDocument as ProjectManifest, bundledMedia)
       const url = URL.createObjectURL(archive)
       const anchor = document.createElement('a')
       anchor.href = url
