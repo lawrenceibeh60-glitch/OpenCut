@@ -17,7 +17,8 @@ Neither client owns a separate project format or editing model. Both consume the
 | apps/desktop | Native GPUI application |
 | apps/api | Cloudflare-compatible API surface |
 | crates/kyrocut-core | Platform-independent project and timeline domain |
-| crates/kyrocut-render | Deterministic CPU RGBA compositing and blend modes |\n| crates/media | Existing FFmpeg setup assets; not yet a complete media engine |
+| crates/kyrocut-render | Deterministic CPU RGBA compositing and blend modes |
+| crates/media | Existing FFmpeg setup assets; not yet a complete media engine |
 
 ## Core design rules
 
