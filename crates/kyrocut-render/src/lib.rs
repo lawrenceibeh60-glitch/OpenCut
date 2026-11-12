@@ -140,7 +140,7 @@ pub fn apply_color_adjustments(
     let exposure = 2.0_f32.powf(adjustments.exposure_stops);
     let contrast = 1.0 + adjustments.contrast;
     let mut output = image.clone();
-    for pixel in output.pixels.chunks_exact_mut(4) {
+    for pixel in output.pixels.as_chunks_mut::<4>().0.iter_mut() {
         let mut rgb = [
             pixel[0] as f32 / 255.0,
             pixel[1] as f32 / 255.0,
@@ -200,7 +200,7 @@ pub fn apply_chroma_key(
     }
     let key = key_rgb.map(|channel| channel as f32 / 255.0);
     let mut output = image.clone();
-    for pixel in output.pixels.chunks_exact_mut(4) {
+    for pixel in output.pixels.as_chunks_mut::<4>().0.iter_mut() {
         let distance = (0..3)
             .map(|channel| {
                 let delta = pixel[channel] as f32 / 255.0 - key[channel];
@@ -309,8 +309,10 @@ pub fn composite(
         }
         for (destination, source) in output
             .pixels
-            .chunks_exact_mut(4)
-            .zip(layer.image.pixels.chunks_exact(4))
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(layer.image.pixels.as_chunks::<4>().0.iter())
         {
             blend_pixel(destination, source, layer.opacity, layer.blend_mode);
         }
