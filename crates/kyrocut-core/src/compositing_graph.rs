@@ -94,17 +94,33 @@ pub enum GraphError {
 impl fmt::Display for GraphError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::EmptyIdentifier => write!(f, "graph, node, socket and connection identifiers must not be empty"),
+            Self::EmptyIdentifier => write!(
+                f,
+                "graph, node, socket and connection identifiers must not be empty"
+            ),
             Self::DuplicateNode(id) => write!(f, "duplicate graph node: {id}"),
-            Self::DuplicateSocket { node_id, socket_id } => write!(f, "duplicate socket {socket_id} on node {node_id}"),
+            Self::DuplicateSocket { node_id, socket_id } => {
+                write!(f, "duplicate socket {socket_id} on node {node_id}")
+            }
             Self::MissingNode(id) => write!(f, "connection references missing node: {id}"),
-            Self::MissingOutputSocket { node_id, socket_id } => write!(f, "missing output socket {socket_id} on node {node_id}"),
-            Self::MissingInputSocket { node_id, socket_id } => write!(f, "missing input socket {socket_id} on node {node_id}"),
-            Self::SocketTypeMismatch { from, to } => write!(f, "cannot connect {from:?} output to {to:?} input"),
-            Self::InputAlreadyConnected { node_id, socket_id } => write!(f, "input {socket_id} on node {node_id} already has a connection"),
+            Self::MissingOutputSocket { node_id, socket_id } => {
+                write!(f, "missing output socket {socket_id} on node {node_id}")
+            }
+            Self::MissingInputSocket { node_id, socket_id } => {
+                write!(f, "missing input socket {socket_id} on node {node_id}")
+            }
+            Self::SocketTypeMismatch { from, to } => {
+                write!(f, "cannot connect {from:?} output to {to:?} input")
+            }
+            Self::InputAlreadyConnected { node_id, socket_id } => write!(
+                f,
+                "input {socket_id} on node {node_id} already has a connection"
+            ),
             Self::DuplicateConnection(id) => write!(f, "duplicate graph connection: {id}"),
             Self::CycleDetected => write!(f, "compositing graph contains a dependency cycle"),
-            Self::MissingOutputNode => write!(f, "compositing graph requires at least one Output node"),
+            Self::MissingOutputNode => {
+                write!(f, "compositing graph requires at least one Output node")
+            }
         }
     }
 }
@@ -155,17 +171,23 @@ impl CompositingGraph {
             if !connection_ids.insert(connection.id.as_str()) {
                 return Err(GraphError::DuplicateConnection(connection.id.clone()));
             }
-            let from_node = nodes.get(connection.from.node_id.as_str())
+            let from_node = nodes
+                .get(connection.from.node_id.as_str())
                 .ok_or_else(|| GraphError::MissingNode(connection.from.node_id.clone()))?;
-            let to_node = nodes.get(connection.to.node_id.as_str())
+            let to_node = nodes
+                .get(connection.to.node_id.as_str())
                 .ok_or_else(|| GraphError::MissingNode(connection.to.node_id.clone()))?;
-            let from_socket = from_node.outputs.iter()
+            let from_socket = from_node
+                .outputs
+                .iter()
                 .find(|socket| socket.id == connection.from.socket_id)
                 .ok_or_else(|| GraphError::MissingOutputSocket {
                     node_id: from_node.id.clone(),
                     socket_id: connection.from.socket_id.clone(),
                 })?;
-            let to_socket = to_node.inputs.iter()
+            let to_socket = to_node
+                .inputs
+                .iter()
                 .find(|socket| socket.id == connection.to.socket_id)
                 .ok_or_else(|| GraphError::MissingInputSocket {
                     node_id: to_node.id.clone(),
@@ -185,8 +207,7 @@ impl CompositingGraph {
             }
         }
 
-        self.execution_order_unchecked()
-            .map(|_| ())
+        self.execution_order_unchecked().map(|_| ())
     }
 
     /// Return node IDs in deterministic dependency order. Independent nodes
@@ -197,13 +218,17 @@ impl CompositingGraph {
     }
 
     fn execution_order_unchecked(&self) -> Result<Vec<String>, GraphError> {
-        let mut indegree: HashMap<&str, usize> = self.nodes.iter()
+        let mut indegree: HashMap<&str, usize> = self
+            .nodes
+            .iter()
             .map(|node| (node.id.as_str(), 0))
             .collect();
         let mut outgoing: HashMap<&str, Vec<&str>> = HashMap::new();
         for connection in &self.connections {
             *indegree.entry(connection.to.node_id.as_str()).or_default() += 1;
-            outgoing.entry(connection.from.node_id.as_str()).or_default()
+            outgoing
+                .entry(connection.from.node_id.as_str())
+                .or_default()
                 .push(connection.to.node_id.as_str());
         }
 
@@ -219,7 +244,8 @@ impl CompositingGraph {
             order.push(node_id.to_owned());
             if let Some(dependents) = outgoing.get(node_id) {
                 for dependent in dependents {
-                    let degree = indegree.get_mut(dependent)
+                    let degree = indegree
+                        .get_mut(dependent)
                         .expect("all connection endpoints were validated");
                     *degree -= 1;
                     if *degree == 0 {
@@ -271,18 +297,39 @@ mod tests {
     use super::*;
 
     fn socket(id: &str, socket_type: SocketType) -> GraphSocket {
-        GraphSocket { id: id.into(), name: id.into(), socket_type }
+        GraphSocket {
+            id: id.into(),
+            name: id.into(),
+            socket_type,
+        }
     }
 
-    fn node(id: &str, operation: NodeOperation, inputs: Vec<GraphSocket>, outputs: Vec<GraphSocket>) -> GraphNode {
-        GraphNode { id: id.into(), label: id.into(), operation, inputs, outputs }
+    fn node(
+        id: &str,
+        operation: NodeOperation,
+        inputs: Vec<GraphSocket>,
+        outputs: Vec<GraphSocket>,
+    ) -> GraphNode {
+        GraphNode {
+            id: id.into(),
+            label: id.into(),
+            operation,
+            inputs,
+            outputs,
+        }
     }
 
     fn connection(id: &str, from: &str, output: &str, to: &str, input: &str) -> GraphConnection {
         GraphConnection {
             id: id.into(),
-            from: GraphEndpoint { node_id: from.into(), socket_id: output.into() },
-            to: GraphEndpoint { node_id: to.into(), socket_id: input.into() },
+            from: GraphEndpoint {
+                node_id: from.into(),
+                socket_id: output.into(),
+            },
+            to: GraphEndpoint {
+                node_id: to.into(),
+                socket_id: input.into(),
+            },
         }
     }
 
@@ -290,9 +337,24 @@ mod tests {
         CompositingGraph {
             id: "comp-main".into(),
             nodes: vec![
-                node("source", NodeOperation::MediaSource, vec![], vec![socket("image", SocketType::Image)]),
-                node("grade", NodeOperation::ColorGrade, vec![socket("input", SocketType::Image)], vec![socket("image", SocketType::Image)]),
-                node("output", NodeOperation::Output, vec![socket("input", SocketType::Image)], vec![]),
+                node(
+                    "source",
+                    NodeOperation::MediaSource,
+                    vec![],
+                    vec![socket("image", SocketType::Image)],
+                ),
+                node(
+                    "grade",
+                    NodeOperation::ColorGrade,
+                    vec![socket("input", SocketType::Image)],
+                    vec![socket("image", SocketType::Image)],
+                ),
+                node(
+                    "output",
+                    NodeOperation::Output,
+                    vec![socket("input", SocketType::Image)],
+                    vec![],
+                ),
             ],
             connections: vec![
                 connection("c1", "source", "image", "grade", "input"),
@@ -305,7 +367,10 @@ mod tests {
     fn validates_and_orders_source_grade_output_pipeline() {
         let graph = sample_graph();
         assert!(graph.validate().is_ok());
-        assert_eq!(graph.execution_order().unwrap(), vec!["source", "grade", "output"]);
+        assert_eq!(
+            graph.execution_order().unwrap(),
+            vec!["source", "grade", "output"]
+        );
     }
 
     #[test]
@@ -314,27 +379,54 @@ mod tests {
         graph.nodes[1].inputs[0].socket_type = SocketType::Mask;
         assert_eq!(
             graph.validate(),
-            Err(GraphError::SocketTypeMismatch { from: SocketType::Image, to: SocketType::Mask })
+            Err(GraphError::SocketTypeMismatch {
+                from: SocketType::Image,
+                to: SocketType::Mask
+            })
         );
     }
 
     #[test]
     fn rejects_multiple_connections_to_one_input() {
         let mut graph = sample_graph();
-        graph.nodes.insert(1, node("source-2", NodeOperation::MediaSource, vec![], vec![socket("image", SocketType::Image)]));
-        graph.connections.push(connection("c3", "source-2", "image", "grade", "input"));
+        graph.nodes.insert(
+            1,
+            node(
+                "source-2",
+                NodeOperation::MediaSource,
+                vec![],
+                vec![socket("image", SocketType::Image)],
+            ),
+        );
+        graph
+            .connections
+            .push(connection("c3", "source-2", "image", "grade", "input"));
         assert_eq!(
             graph.validate(),
-            Err(GraphError::InputAlreadyConnected { node_id: "grade".into(), socket_id: "input".into() })
+            Err(GraphError::InputAlreadyConnected {
+                node_id: "grade".into(),
+                socket_id: "input".into()
+            })
         );
     }
 
     #[test]
     fn rejects_cycles_before_execution() {
         let mut graph = sample_graph();
-        graph.connections.push(connection("cycle", "grade", "image", "source", "impossible"));
-        assert!(matches!(graph.validate(), Err(GraphError::MissingInputSocket { .. })));
-        graph.nodes[0].inputs.push(socket("feedback", SocketType::Image));
+        graph.connections.push(connection(
+            "cycle",
+            "grade",
+            "image",
+            "source",
+            "impossible",
+        ));
+        assert!(matches!(
+            graph.validate(),
+            Err(GraphError::MissingInputSocket { .. })
+        ));
+        graph.nodes[0]
+            .inputs
+            .push(socket("feedback", SocketType::Image));
         graph.connections.last_mut().unwrap().to.node_id = "source".into();
         graph.connections.last_mut().unwrap().to.socket_id = "feedback".into();
         assert_eq!(graph.validate(), Err(GraphError::CycleDetected));
@@ -360,9 +452,15 @@ mod tests {
     fn rejects_duplicate_node_and_connection_ids() {
         let mut graph = sample_graph();
         graph.nodes.push(graph.nodes[0].clone());
-        assert_eq!(graph.validate(), Err(GraphError::DuplicateNode("source".into())));
+        assert_eq!(
+            graph.validate(),
+            Err(GraphError::DuplicateNode("source".into()))
+        );
         let mut graph = sample_graph();
         graph.connections.push(graph.connections[0].clone());
-        assert_eq!(graph.validate(), Err(GraphError::DuplicateConnection("c1".into())));
+        assert_eq!(
+            graph.validate(),
+            Err(GraphError::DuplicateConnection("c1".into()))
+        );
     }
 }
