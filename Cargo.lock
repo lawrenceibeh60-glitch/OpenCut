@@ -2934,6 +2934,7 @@ dependencies = [
  "kyrocut-audio",
  "kyrocut-core",
  "kyrocut-render",
+ "serde_json",
 ]
 
 [[package]]
