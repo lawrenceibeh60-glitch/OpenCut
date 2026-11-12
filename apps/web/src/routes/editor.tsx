@@ -113,8 +113,13 @@ function Editor() {
   }
   const splitSelectedClip = () => {
     if (!selectedClip) return
+    const relativePlayhead = playhead - selectedClip.start
+    if (relativePlayhead <= 0 || relativePlayhead >= selectedClip.duration) {
+      setNotice('Move the playhead inside the selected clip to split it')
+      return
+    }
     const oneFrame = framesToSeconds(1, SEQUENCE_FRAME_RATE)
-    const splitOffset = framesToSeconds(secondsToFrames(playhead - selectedClip.start, SEQUENCE_FRAME_RATE), SEQUENCE_FRAME_RATE)
+    const splitOffset = framesToSeconds(secondsToFrames(relativePlayhead, SEQUENCE_FRAME_RATE), SEQUENCE_FRAME_RATE)
     if (splitOffset < oneFrame || splitOffset > selectedClip.duration - oneFrame) {
       setNotice('Move the playhead inside the selected clip to split it')
       return
