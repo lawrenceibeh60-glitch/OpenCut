@@ -16,18 +16,18 @@ const uid = () => 'kx-' + Date.now() + '-' + Math.random().toString(16).slice(2)
 const port = (id: string, socketType: SocketType): Socket => ({ id, name: id, socketType })
 const defs: Record<Operation, { label: string; inputs: Socket[]; outputs: Socket[]; parameters: Record<string, unknown> }> = {
  media_source:{label:'Media Source',inputs:[],outputs:[port('image','image')],parameters:{mediaId:''}},
- transform2d:{label:'Transform 2D',inputs:[port('image','image')],outputs:[port('image','image')],parameters:{positionX:0,positionY:0,scaleX:1,scaleY:1,rotation:0,opacity:1}},
- color_grade:{label:'Color Grade',inputs:[port('image','image')],outputs:[port('image','image')],parameters:{exposure:0,contrast:1,saturation:1,gamma:1,brightness:0}},
- chroma_key:{label:'Chroma Key',inputs:[port('image','image')],outputs:[port('image','image')],parameters:{keyColor:'#00ff00',similarity:0.25,smoothness:0.1}},
- mask:{label:'Mask',inputs:[port('image','image'),port('mask','mask')],outputs:[port('image','image')],parameters:{invert:false,feather:0}},
+ transform2d:{label:'Transform 2D',inputs:[port('image','image')],outputs:[port('image','image')],parameters:{positionX:0,positionY:0,scaleX:1,scaleY:1,rotationRadians:0,opacity:1}},
+ color_grade:{label:'Color Grade',inputs:[port('image','image')],outputs:[port('image','image')],parameters:{exposureStops:0,contrast:0,saturation:1,gamma:1,brightness:0}},
+ chroma_key:{label:'Chroma Key',inputs:[port('image','image')],outputs:[port('image','image')],parameters:{keyColor:'#00ff00',threshold:0.12,softness:0.08}},
+ mask:{label:'Mask',inputs:[port('image','image')],outputs:[port('mask','mask')],parameters:{}},
  blend:{label:'Blend',inputs:[port('base','image'),port('overlay','image'),port('mask','mask')],outputs:[port('image','image')],parameters:{mode:'normal',opacity:1}},
- merge:{label:'Merge',inputs:[port('background','image'),port('foreground','image')],outputs:[port('image','image')],parameters:{opacity:1}},
+ merge:{label:'Merge',inputs:[port('base','image'),port('foreground','image'),port('mask','mask')],outputs:[port('image','image')],parameters:{opacity:1}},
  output:{label:'Output',inputs:[port('image','image')],outputs:[],parameters:{}}
 }
 const base: Graph = {id:'composition-main',nodes:[
  {id:'source-1',label:'Footage Source',operation:'media_source',parameters:{mediaId:''},inputs:[],outputs:[port('image','image')]},
- {id:'transform-1',label:'Transform',operation:'transform2d',parameters:{positionX:0,positionY:0,scaleX:1,scaleY:1,rotation:0,opacity:1},inputs:[port('image','image')],outputs:[port('image','image')]},
- {id:'grade-1',label:'Color Grade',operation:'color_grade',parameters:{exposure:0,contrast:1,saturation:1,gamma:1,brightness:0},inputs:[port('image','image')],outputs:[port('image','image')]},
+ {id:'transform-1',label:'Transform',operation:'transform2d',parameters:{positionX:0,positionY:0,scaleX:1,scaleY:1,rotationRadians:0,opacity:1},inputs:[port('image','image')],outputs:[port('image','image')]},
+ {id:'grade-1',label:'Color Grade',operation:'color_grade',parameters:{exposureStops:0,contrast:0,saturation:1,gamma:1,brightness:0},inputs:[port('image','image')],outputs:[port('image','image')]},
  {id:'output-1',label:'Final Output',operation:'output',parameters:{},inputs:[port('image','image')],outputs:[]}],
  connections:[
  {id:'wire-1',from:{nodeId:'source-1',socketId:'image'},to:{nodeId:'transform-1',socketId:'image'}},
@@ -57,7 +57,7 @@ function Compositor(){
  const update=(key:string,value:unknown)=>{if(!selected)return;setGraph(g=>({...g,nodes:g.nodes.map(n=>n.id===selected.id?{...n,parameters:{...n.parameters,[key]:value}}:n)}))}
  const addKey=(key:string)=>{if(!selected)return;const anim=(selected.parameters.animation||{}) as Record<string,{keyframes:{frame:number;value:number;interpolation:string}[]}>;const curve=anim[key]||{keyframes:[]};if(curve.keyframes.some(k=>k.frame===frame)){setNotice('A keyframe already exists at this frame.');return}update('animation',{...anim,[key]:{keyframes:[...curve.keyframes,{frame,value:Number(selected.parameters[key]||0),interpolation:'smoothStep'}].sort((a,b)=>a.frame-b.frame)}});setNotice('Keyframe added for '+key+'.')}
  const save=()=>{localStorage.setItem('kyrocut-x1:compositor',JSON.stringify({graph,layout}));setSaved(true);setNotice('Workspace saved locally.');window.setTimeout(()=>setSaved(false),1500)}
- const exportGraph=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(graph,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=graph.id+'.kyrograph.json';a.click();URL.revokeObjectURL(url)}
+ const exportGraph=()=>{if(errors.length){setNotice('Fix graph validation issues before exporting.');return}const url=URL.createObjectURL(new Blob([JSON.stringify(graph,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=graph.id+'.kyrograph.json';a.click();URL.revokeObjectURL(url)}
  const importGraph=async(file?:File)=>{if(!file)return;try{const next=JSON.parse(await file.text()) as Graph;const problems=validate(next);if(problems.length)throw new Error(problems[0]);setGraph(next);setLayout(Object.fromEntries(next.nodes.map((n,i)=>[n.id,layout[n.id]||{x:60+(i%4)*290,y:100+Math.floor(i/4)*200}])));setSelectedId(next.nodes[0]?.id||'');setNotice('Imported '+next.nodes.length+' nodes.')}catch(e){setNotice('Import rejected: '+(e instanceof Error?e.message:'invalid graph'))}}
  const point=(id:string,side:'input'|'output',socketId:string)=>{const n=graph.nodes.find(v=>v.id===id),p=layout[id];if(!n||!p)return null;const list=side==='input'?n.inputs:n.outputs,i=list.findIndex(v=>v.id===socketId);return i<0?null:{x:p.x+(side==='input'?0:236),y:p.y+83+i*31}}
  return <main className="kx-compositor">
