@@ -1,0 +1,42 @@
+name: KYROCUT X1 Web Studio
+
+on:
+  pull_request:
+    paths:
+      - "apps/web/**"
+      - ".github/workflows/web-studio-ci.yml"
+  push:
+    branches:
+      - main
+      - "feat/kyrocut-x1-*"
+    paths:
+      - "apps/web/**"
+      - ".github/workflows/web-studio-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyrocut-web-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Typecheck and production build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install
+      - name: Typecheck
+        run: bunx tsc --noEmit
+      - name: Production build
+        run: bun run build
