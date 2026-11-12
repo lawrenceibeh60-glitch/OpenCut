@@ -16,7 +16,7 @@ export type ProjectManifest = {
     name: string
     kind: ProjectMediaKind
     size: number
-    durationFrames: number
+    durationFrames: number | null
     mimeType: string
     locator: string
   }>
@@ -109,7 +109,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
       name: stringValue(value.name, 'Media name'),
       kind,
       size: integerValue(value.size, 'Media size'),
-      durationFrames: value.durationFrames === null || value.durationFrames === undefined ? 0 : integerValue(value.durationFrames, 'Media duration frames'),
+      durationFrames: value.durationFrames === null || value.durationFrames === undefined ? null : integerValue(value.durationFrames, 'Media duration frames'),
       mimeType: typeof value.mimeType === 'string' ? value.mimeType : '',
       locator: stringValue(value.locator, 'Media locator'),
     }
@@ -138,7 +138,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
       const timelineStartFrame = integerValue(clip.timelineStartFrame, 'Clip timeline start')
       const sourceInFrame = integerValue(clip.sourceInFrame, 'Clip source in')
       const durationFrames = integerValue(clip.durationFrames, 'Clip duration', 1)
-      if (source.durationFrames > 0 && (durationFrames > source.durationFrames || sourceInFrame > source.durationFrames - durationFrames)) {
+      if (source.durationFrames !== null && source.durationFrames > 0 && (durationFrames > source.durationFrames || sourceInFrame > source.durationFrames - durationFrames)) {
         throw new Error('Clip source range exceeds media duration: ' + clipId)
       }
       return { id: clipId, mediaId, timelineStartFrame, sourceInFrame, durationFrames, enabled: clip.enabled === undefined ? true : booleanValue(clip.enabled, 'Clip enabled state') }
