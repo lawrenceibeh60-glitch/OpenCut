@@ -1,6 +1,6 @@
 //! Transactional edit operations shared by desktop and web clients.
 
-use crate::{Clip, Frame, Project, ProjectError};
+use crate::{Frame, Project, ProjectError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EditCommand {
