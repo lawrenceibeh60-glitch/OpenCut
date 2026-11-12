@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
 .kx-home { min-height: 100vh; color: #e8eff6; background: #080d13; font-family: 'Inter', sans-serif; }
 .kx-home * { box-sizing: border-box; }
 .kx-home-nav { height: 68px; display: flex; align-items: center; justify-content: space-between; padding: 0 clamp(20px, 5vw, 76px); border-bottom: 1px solid #23313e; background: #0b121a; }
