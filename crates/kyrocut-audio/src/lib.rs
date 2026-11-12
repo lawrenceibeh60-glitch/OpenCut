@@ -7,6 +7,16 @@
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct AudioClip<'a> {
+    pub source: &'a PcmBuffer,
+    pub timeline_start_frame: usize,
+    pub source_in_frame: usize,
+    pub duration_frames: usize,
+    pub gain_db: f32,
+    pub pan: f32,
+    pub enabled: bool,
+}
+
 pub struct PcmBuffer {
     sample_rate: u32,
     channels: u16,
@@ -21,6 +31,7 @@ pub enum AudioError {
     InvalidGain,
     InvalidPan,
     FormatMismatch,
+    ClipOutOfBounds,
 }
 
 impl fmt::Display for AudioError {
@@ -32,6 +43,7 @@ impl fmt::Display for AudioError {
             Self::InvalidGain => write!(f, "gain must be finite and within the supported range"),
             Self::InvalidPan => write!(f, "stereo pan must be between -1 and 1"),
             Self::FormatMismatch => write!(f, "source and destination PCM formats must match"),
+            Self::ClipOutOfBounds => write!(f, "audio clip source range exceeds its PCM buffer"),
         }
     }
 }
@@ -151,9 +163,35 @@ impl PcmBuffer {
             return Err(AudioError::InvalidPan);
         }
 
+        self.mix_region_from(source, 0, source.frame_count(), start_frame, gain, pan)
+    }
+
+    pub fn mix_region_from(
+        &mut self,
+        source: &PcmBuffer,
+        source_start_frame: usize,
+        source_frame_count: usize,
+        destination_start_frame: usize,
+        gain: f32,
+        pan: f32,
+    ) -> Result<(), AudioError> {
+        if self.sample_rate != source.sample_rate || self.channels != source.channels {
+            return Err(AudioError::FormatMismatch);
+        }
+        if !gain.is_finite() || !(-16.0..=16.0).contains(&gain) {
+            return Err(AudioError::InvalidGain);
+        }
+        if !pan.is_finite() || !(-1.0..=1.0).contains(&pan) {
+            return Err(AudioError::InvalidPan);
+        }
+        let source_end = source_start_frame.checked_add(source_frame_count).ok_or(AudioError::ClipOutOfBounds)?;
+        if source_end > source.frame_count() {
+            return Err(AudioError::ClipOutOfBounds);
+        }
+
         let channels = self.channels as usize;
-        let available = self.frame_count().saturating_sub(start_frame);
-        let count = available.min(source.frame_count());
+        let available = self.frame_count().saturating_sub(destination_start_frame);
+        let count = available.min(source_frame_count);
         let (left_pan, right_pan) = if channels == 2 {
             let angle = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
             (angle.cos() * std::f32::consts::SQRT_2, angle.sin() * std::f32::consts::SQRT_2)
@@ -168,8 +206,8 @@ impl PcmBuffer {
                 } else {
                     1.0
                 };
-                let destination_index = (start_frame + frame) * channels + channel;
-                let source_index = frame * channels + channel;
+                let destination_index = (destination_start_frame + frame) * channels + channel;
+                let source_index = (source_start_frame + frame) * channels + channel;
                 self.samples[destination_index] += source.samples[source_index] * gain * pan_gain;
             }
         }
@@ -185,9 +223,68 @@ impl PcmBuffer {
     }
 }
 
+/// Render an audio timeline into an interleaved floating-point mix buffer.
+pub fn mix_timeline(
+    sample_rate: u32,
+    channels: u16,
+    total_frames: usize,
+    clips: &[AudioClip<'_>],
+) -> Result<PcmBuffer, AudioError> {
+    let mut output = PcmBuffer::silence(sample_rate, channels, total_frames)?;
+    for clip in clips {
+        if !clip.enabled {
+            continue;
+        }
+        if !clip.gain_db.is_finite() || !(-120.0..=60.0).contains(&clip.gain_db) {
+            return Err(AudioError::InvalidGain);
+        }
+        let gain = 10.0_f32.powf(clip.gain_db / 20.0);
+        output.mix_region_from(
+            clip.source,
+            clip.source_in_frame,
+            clip.duration_frames,
+            clip.timeline_start_frame,
+            gain,
+            clip.pan,
+        )?;
+    }
+    Ok(output)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn timeline_mixer_respects_source_in_and_timeline_start() {
+        let source = PcmBuffer::new(48_000, 1, vec![0.1, 0.2, 0.3, 0.4]).unwrap();
+        let output = mix_timeline(48_000, 1, 5, &[AudioClip {
+            source: &source, timeline_start_frame: 1, source_in_frame: 1,
+            duration_frames: 2, gain_db: 0.0, pan: 0.0, enabled: true,
+        }]).unwrap();
+        assert_eq!(output.samples(), &[0.0, 0.2, 0.3, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn timeline_mixer_sums_overlapping_clips_and_skips_disabled_clips() {
+        let source = PcmBuffer::new(48_000, 1, vec![0.25, 0.25]).unwrap();
+        let output = mix_timeline(48_000, 1, 2, &[
+            AudioClip { source: &source, timeline_start_frame: 0, source_in_frame: 0, duration_frames: 2, gain_db: 0.0, pan: 0.0, enabled: true },
+            AudioClip { source: &source, timeline_start_frame: 0, source_in_frame: 0, duration_frames: 2, gain_db: 0.0, pan: 0.0, enabled: true },
+            AudioClip { source: &source, timeline_start_frame: 0, source_in_frame: 0, duration_frames: 2, gain_db: 0.0, pan: 0.0, enabled: false },
+        ]).unwrap();
+        assert_eq!(output.samples(), &[0.5, 0.5]);
+    }
+
+    #[test]
+    fn timeline_mixer_rejects_clip_source_overrun() {
+        let source = PcmBuffer::new(48_000, 1, vec![0.1, 0.2]).unwrap();
+        let result = mix_timeline(48_000, 1, 2, &[AudioClip {
+            source: &source, timeline_start_frame: 0, source_in_frame: 1,
+            duration_frames: 2, gain_db: 0.0, pan: 0.0, enabled: true,
+        }]);
+        assert_eq!(result, Err(AudioError::ClipOutOfBounds));
+    }
 
     #[test]
     fn validates_pcm_format_and_interleaving() {
