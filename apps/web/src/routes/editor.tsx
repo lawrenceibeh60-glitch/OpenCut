@@ -133,6 +133,7 @@ function Editor() {
         ? [{ ...clip, duration: splitOffset }, rightClip] : [clip]) }
       : track))
     setSelectedClipId(rightClip.id)
+    setPlayhead(selectedClip.start + splitOffset)
     setNotice('Clip split at the playhead')
   }
   const removeSelectedClip = () => {
