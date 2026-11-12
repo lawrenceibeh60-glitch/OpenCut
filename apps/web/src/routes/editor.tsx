@@ -4,6 +4,7 @@ import type { DragEvent } from 'react'
 import { framesToSeconds, secondsToFrames, SEQUENCE_FRAME_RATE } from '../lib/timebase'
 import type { RationalFrameRate } from '../lib/timebase'
 import { parseProjectManifest } from '../lib/project-format'
+import { getMediaBlob, saveMediaBlob } from '../lib/media-storage'
 import {
   AudioLines, ChevronDown, Clapperboard, Film, FolderOpen, ImagePlus, Layers3,
   Minus, Music2, Pause, Play, Plus, Save, Scissors, Settings2, Sparkles, Trash2,
@@ -53,40 +54,61 @@ function Editor() {
   useEffect(() => () => objectUrls.current.forEach((url) => URL.revokeObjectURL(url)), [])
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('kyrocut-x1:recovery')
-      if (saved) {
-        const manifest = parseProjectManifest(saved)
-        if (manifest.format === 'kyrocut-project' && manifest.version === 1 && Array.isArray(manifest.media) && Array.isArray(manifest.tracks)) {
-          const frameRate = manifest.frameRate?.numerator && manifest.frameRate?.denominator ? manifest.frameRate : SEQUENCE_FRAME_RATE
-          setProjectFrameRate(frameRate)
-          setProjectResolution(manifest.resolution)
-          setAssets(manifest.media.map((asset) => ({
-            id: asset.id, name: asset.name, kind: asset.kind, url: '',
-            size: asset.size ?? 0, duration: framesToSeconds(asset.durationFrames ?? 0, frameRate),
-            durationKnown: asset.durationFrames !== null, mimeType: asset.mimeType ?? '', missing: true,
-          })))
-          setTracks(manifest.tracks.map((track) => ({
-            id: track.id, name: track.name, kind: track.kind,
-            muted: Boolean(track.muted), locked: Boolean(track.locked),
-            clips: track.clips.map((clip) => ({
-              id: clip.id, mediaId: clip.mediaId,
-              start: framesToSeconds(clip.timelineStartFrame, frameRate),
-              sourceIn: framesToSeconds(clip.sourceInFrame, frameRate),
-              duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled,
-            })),
-          })))
-          setProjectId(manifest.id ?? createId())
-          setProjectName(manifest.name || 'Recovered project')
-          setPlayhead(framesToSeconds(manifest.playheadFrame ?? 0, frameRate))
-          setNotice('Recovered the latest local project snapshot. Relink source media to preview.')
+    let active = true
+    const recover = async () => {
+      try {
+        const saved = localStorage.getItem('kyrocut-x1:recovery')
+        if (saved) {
+          const manifest = parseProjectManifest(saved)
+          if (manifest.format === 'kyrocut-project' && manifest.version === 1 && Array.isArray(manifest.media) && Array.isArray(manifest.tracks)) {
+            const frameRate = manifest.frameRate?.numerator && manifest.frameRate?.denominator ? manifest.frameRate : SEQUENCE_FRAME_RATE
+            const restoredAssets = await Promise.all(manifest.media.map(async (asset) => {
+              const blob = await getMediaBlob(asset.id).catch(() => null)
+              const url = blob ? URL.createObjectURL(blob) : ''
+              if (url) objectUrls.current.push(url)
+              return {
+                id: asset.id, name: asset.name, kind: asset.kind, url,
+                size: blob?.size ?? asset.size ?? 0,
+                duration: framesToSeconds(asset.durationFrames ?? 0, frameRate),
+                durationKnown: asset.durationFrames !== null,
+                mimeType: blob?.type ?? asset.mimeType ?? '',
+                missing: !blob,
+              }
+            }))
+            if (!active) {
+              restoredAssets.forEach((asset) => { if (asset.url) URL.revokeObjectURL(asset.url) })
+              return
+            }
+            setProjectFrameRate(frameRate)
+            setProjectResolution(manifest.resolution)
+            setAssets(restoredAssets)
+            setTracks(manifest.tracks.map((track) => ({
+              id: track.id, name: track.name, kind: track.kind,
+              muted: Boolean(track.muted), locked: Boolean(track.locked),
+              clips: track.clips.map((clip) => ({
+                id: clip.id, mediaId: clip.mediaId,
+                start: framesToSeconds(clip.timelineStartFrame, frameRate),
+                sourceIn: framesToSeconds(clip.sourceInFrame, frameRate),
+                duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled,
+              })),
+            })))
+            setProjectId(manifest.id ?? createId())
+            setProjectName(manifest.name || 'Recovered project')
+            setPlayhead(framesToSeconds(manifest.playheadFrame ?? 0, frameRate))
+            const offline = restoredAssets.filter((asset) => !asset.url).length
+            setNotice(offline
+              ? `Recovered project. ${offline} source file(s) need relinking.`
+              : 'Recovered project and restored its locally stored media.')
+          }
         }
+      } catch {
+        if (active) setNotice('Local recovery snapshot could not be read; starting a fresh project.')
+      } finally {
+        if (active) setRecoveryReady(true)
       }
-    } catch {
-      setNotice('Local recovery snapshot could not be read; starting a fresh project.')
-    } finally {
-      setRecoveryReady(true)
     }
+    void recover()
+    return () => { active = false }
   }, [])
 
   const allClips = useMemo(() => tracks.flatMap((track) => track.clips.map((clip) => ({ ...clip, trackId: track.id }))), [tracks])
@@ -135,6 +157,7 @@ function Editor() {
     const accepted = Array.from(files).filter((file) => mediaKind(file))
     if (!accepted.length) { setNotice('Choose a video, audio or image file'); return }
     const additions: MediaAsset[] = []
+    let storageFailures = 0
     for (const file of accepted) {
       const kind = mediaKind(file)
       if (!kind) continue
@@ -149,12 +172,22 @@ function Editor() {
           probe.src = probeUrl
         })
       }
+      const id = createId()
+      let stored = true
+      try {
+        await saveMediaBlob(id, file, file.name)
+      } catch {
+        stored = false
+      }
       const assetUrl = URL.createObjectURL(file)
       objectUrls.current.push(assetUrl)
-      additions.push({ id: createId(), name: file.name, kind, url: assetUrl, size: file.size, duration: duration || 8, durationKnown: kind === 'image' || duration > 0, mimeType: file.type })
+      additions.push({ id, name: file.name, kind, url: assetUrl, size: file.size, duration: duration || 8, durationKnown: kind === 'image' || duration > 0, mimeType: file.type })
+      if (!stored) storageFailures += 1
     }
     setAssets((current) => [...current, ...additions])
-    setNotice(`Imported ${additions.length} media item${additions.length === 1 ? '' : 's'}`)
+    setNotice(storageFailures
+      ? `Imported ${additions.length} media item(s), but browser storage could not retain ${storageFailures} file(s). Keep those originals safe.`
+      : `Imported ${additions.length} media item(s) and saved them to browser storage.`)
   }, [])
 
   const addAssetToTimeline = (asset: MediaAsset) => {
@@ -273,9 +306,22 @@ function Editor() {
         return
       }
       const frameRate = manifest.frameRate?.numerator && manifest.frameRate?.denominator ? manifest.frameRate : SEQUENCE_FRAME_RATE
+      const restoredAssets = await Promise.all(manifest.media.map(async (asset) => {
+        const blob = await getMediaBlob(asset.id).catch(() => null)
+        const url = blob ? URL.createObjectURL(blob) : ''
+        if (url) objectUrls.current.push(url)
+        return {
+          id: asset.id, name: asset.name, kind: asset.kind, url,
+          size: blob?.size ?? asset.size ?? 0,
+          duration: framesToSeconds(asset.durationFrames ?? 0, frameRate),
+          durationKnown: asset.durationFrames !== null,
+          mimeType: blob?.type ?? asset.mimeType ?? '',
+          missing: !blob,
+        }
+      }))
       setProjectFrameRate(frameRate)
       setProjectResolution(manifest.resolution)
-      setAssets(manifest.media.map((asset) => ({ id: asset.id, name: asset.name, kind: asset.kind, url: '', size: asset.size ?? 0, duration: framesToSeconds(asset.durationFrames ?? 0, frameRate), durationKnown: asset.durationFrames !== null, mimeType: asset.mimeType ?? '', missing: true })))
+      setAssets(restoredAssets)
       setTracks(manifest.tracks.map((track) => ({
         id: track.id, name: track.name, kind: track.kind, muted: Boolean(track.muted), locked: Boolean(track.locked),
         clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, start: framesToSeconds(clip.timelineStartFrame, frameRate), sourceIn: framesToSeconds(clip.sourceInFrame, frameRate), duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled })),
@@ -285,24 +331,39 @@ function Editor() {
       setPlayhead(framesToSeconds(manifest.playheadFrame ?? 0, frameRate))
       setSelectedClipId(null)
       setPlaying(false)
-      setNotice('Opened ' + file.name + '. Relink the ' + manifest.media.length + ' source media item(s) to preview them.')
+      const offline = restoredAssets.filter((asset) => !asset.url).length
+      setNotice(offline
+        ? 'Opened ' + file.name + '. Relink ' + offline + ' source media item(s) to preview them.'
+        : 'Opened ' + file.name + ' and restored all matching media from browser storage.')
     } catch {
       setNotice('Could not read this project file. Check that it is valid JSON.')
     }
   }
 
-  const relinkMedia = (files: FileList | File[]) => {
+  const relinkMedia = async (files: FileList | File[]) => {
     const candidates = Array.from(files)
-    let linked = 0
+    const updates = new Map<string, MediaAsset>()
+    let storageFailures = 0
     for (const asset of missingAssets) {
       const file = candidates.find((candidate) => candidate.name.toLowerCase() === asset.name.toLowerCase() && mediaKind(candidate) === asset.kind)
       if (!file) continue
+      try {
+        await saveMediaBlob(asset.id, file, file.name)
+      } catch {
+        storageFailures += 1
+      }
       const url = URL.createObjectURL(file)
       objectUrls.current.push(url)
-      setAssets((current) => current.map((item) => item.id === asset.id ? { ...item, url, size: file.size, mimeType: file.type, missing: false } : item))
-      linked += 1
+      updates.set(asset.id, { ...asset, url, size: file.size, mimeType: file.type, missing: false })
     }
-    setNotice(linked ? 'Relinked ' + linked + ' media item(s)' : 'No matching filenames found. Rename the source files or import them individually.')
+    if (updates.size) {
+      setAssets((current) => current.map((item) => updates.get(item.id) ?? item))
+      setNotice(storageFailures
+        ? 'Relinked ' + updates.size + ' media item(s), but browser storage could not save ' + storageFailures + ' file(s).'
+        : 'Relinked and stored ' + updates.size + ' media item(s) for future sessions.')
+    } else {
+      setNotice('No matching filenames found. Rename the source files or import them individually.')
+    }
   }
   const togglePlayback = () => {
     if (!selectedClip || !selectedAsset) { setNotice('Select a timeline clip to preview it'); return }
@@ -383,7 +444,7 @@ function Editor() {
               <Upload size={21} /><strong>Import media</strong><span>Video, audio and image files</span>
             </div>
             <div className="kx-section-label">PROJECT ASSETS <span>{assets.length}</span></div>
-            {missingAssets.length > 0 && <div className="kx-relink-box"><span>{missingAssets.length} OFFLINE SOURCE(S)</span><button onClick={() => relinkInput.current?.click()}>Relink media</button><input ref={relinkInput} hidden multiple type="file" accept="video/*,audio/*,image/*" onChange={(event) => { if (event.target.files) relinkMedia(event.target.files); event.target.value = '' }} /></div>}
+            {missingAssets.length > 0 && <div className="kx-relink-box"><span>{missingAssets.length} OFFLINE SOURCE(S)</span><button onClick={() => relinkInput.current?.click()}>Relink media</button><input ref={relinkInput} hidden multiple type="file" accept="video/*,audio/*,image/*" onChange={(event) => { if (event.target.files) void relinkMedia(event.target.files); event.target.value = '' }} /></div>}
             {assets.length === 0 ? <div className="kx-empty-small"><ImagePlus size={23} /><span>Your imported media will appear here.</span></div> : <div className="kx-asset-list">
               {assets.map((asset) => <div className="kx-asset" key={asset.id}>
                 <span className={`kx-asset-icon ${asset.kind}`}>{asset.kind === 'video' ? <Video size={16} /> : asset.kind === 'audio' ? <Music2 size={16} /> : <ImagePlus size={16} />}</span>
