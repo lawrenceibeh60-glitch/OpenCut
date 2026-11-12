@@ -364,9 +364,9 @@ pub fn mix_project_audio(
     const SAMPLE_RATE: u32 = 48_000;
     const CHANNELS: u16 = 2;
 
-    fn frames_to_samples(frames: u64, rate: kyrocut_core::FrameRate) -> Result<usize, MediaError> {
+    fn frames_to_samples(frames: u64, rate: kyrocut_core::FrameRate, sample_rate: u32) -> Result<usize, MediaError> {
         let numerator = (frames as u128)
-            .checked_mul(SAMPLE_RATE as u128)
+            .checked_mul(sample_rate as u128)
             .and_then(|value| value.checked_mul(rate.denominator as u128))
             .ok_or_else(|| MediaError::Audio("audio timeline position overflow".into()))?;
         let denominator = rate.numerator as u128;
@@ -378,7 +378,7 @@ pub fn mix_project_audio(
             .map_err(|_| MediaError::Audio("audio timeline exceeds addressable memory".into()))
     }
 
-    let output_frames = frames_to_samples(project.duration_frames(), project.frame_rate)?;
+    let output_frames = frames_to_samples(project.duration_frames(), project.frame_rate, SAMPLE_RATE)?;
     let mut clips = Vec::new();
     for track in &project.tracks {
         if track.kind != kyrocut_core::TrackKind::Audio || track.muted {
@@ -405,9 +405,9 @@ pub fn mix_project_audio(
             }
             clips.push(kyrocut_audio::AudioClip {
                 source,
-                timeline_start_frame: frames_to_samples(clip.timeline_start.0, project.frame_rate)?,
-                source_in_frame: frames_to_samples(clip.source_in.0, project.frame_rate)?,
-                duration_frames: frames_to_samples(clip.duration_frames, project.frame_rate)?,
+                timeline_start_frame: frames_to_samples(clip.timeline_start.0, project.frame_rate, SAMPLE_RATE)?,
+                source_in_frame: frames_to_samples(clip.source_in.0, project.frame_rate, SAMPLE_RATE)?,
+                duration_frames: frames_to_samples(clip.duration_frames, project.frame_rate, SAMPLE_RATE)?,
                 gain_db: 0.0,
                 pan: 0.0,
                 enabled: true,
