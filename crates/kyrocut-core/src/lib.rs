@@ -299,6 +299,7 @@ impl Project {
     pub fn active_clips_at(&self, position: Frame) -> Vec<ActiveClip<'_>> {
         self.tracks.iter().flat_map(|track| {
             track.clips.iter().filter_map(move |clip| {
+                if track.muted { return None; }
                 let active = clip.enabled
                     && clip.timeline_start.0 <= position.0
                     && position.0 < clip.timeline_end().0;
@@ -332,6 +333,7 @@ pub enum ProjectError {
     UnknownMedia(String),
     UnknownClip(String),
     UnknownTrack(String),
+    TrackLocked(String),
     ClipExceedsMedia(String),
     DuplicateIdentifier(String),
 }
@@ -348,6 +350,7 @@ impl fmt::Display for ProjectError {
             Self::UnknownMedia(id) => write!(f, "clip references unknown media: {id}"),
             Self::UnknownClip(id) => write!(f, "unknown clip: {id}"),
             Self::UnknownTrack(id) => write!(f, "unknown track: {id}"),
+            Self::TrackLocked(id) => write!(f, "track is locked: {id}"),
             Self::ClipExceedsMedia(id) => write!(f, "clip source range exceeds media duration: {id}"),
             Self::DuplicateIdentifier(id) => write!(f, "duplicate project identifier: {id}"),
         }
@@ -359,6 +362,25 @@ impl std::error::Error for ProjectError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn muted_tracks_do_not_contribute_active_clips() {
+        let mut project = Project::new("Muted track", 1280, 720, FrameRate::FPS_30);
+        project.media.push(MediaReference {
+            id: "media-1".into(), name: "source.mp4".into(), kind: MediaKind::Video,
+            size_bytes: 100, mime_type: "video/mp4".into(), locator: "media/source.mp4".into(),
+            duration_frames: Some(60),
+        });
+        project.tracks.push(Track {
+            id: "track-1".into(), name: "V1".into(), kind: TrackKind::Video,
+            muted: true, locked: false,
+            clips: vec![Clip {
+                id: "clip-1".into(), media_id: "media-1".into(),
+                timeline_start: Frame(0), source_in: Frame(0), duration_frames: 30, enabled: true,
+            }],
+        });
+        assert!(project.active_clips_at(Frame(1)).is_empty());
+    }
 
     #[test]
     fn project_document_json_round_trips_frame_based_timeline() {
