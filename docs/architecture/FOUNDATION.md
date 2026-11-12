@@ -56,7 +56,7 @@ The core currently evaluates frame-addressed scalar curves with Hold, Linear, Sm
 
 ### Audio graph
 
-The first audio crate provides validated interleaved PCM buffers, sample-accurate mixing, decibel gain, fades, stereo pan, peak and RMS metering. Compressed decoding, timeline scheduling, automation, effects, limiting and output-device integration remain future work.
+The first audio crate provides validated interleaved PCM buffers, sample-accurate timeline clip mixing with source-in and duration boundaries, decibel gain, fades, stereo pan, peak and RMS metering. Compressed decoding, timeline scheduling, automation, effects, limiting and output-device integration remain future work.
 
 ### Client adapters
 
