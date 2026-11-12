@@ -56,4 +56,4 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Test shared engine crates
-        run: cargo test -p kyrocut-core -p kyrocut-render -p kyrocut-audio
+        run: cargo test --locked -p kyrocut-core -p kyrocut-render -p kyrocut-audio
