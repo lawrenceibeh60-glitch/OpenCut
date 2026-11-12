@@ -18,6 +18,6 @@ impl Render for Browser {
             .border_color(colors.sidebar_border)
             .bg(colors.sidebar)
             .text_color(colors.sidebar_foreground)
-            .child("Browser")
+            .child("MEDIA LIBRARY")
     }
 }
