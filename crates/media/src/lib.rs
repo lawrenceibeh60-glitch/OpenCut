@@ -352,6 +352,73 @@ pub fn decode_audio_f32_stereo(path: impl AsRef<Path>) -> Result<kyrocut_audio::
         .map_err(|error| MediaError::Audio(error.to_string()))
 }
 
+/// Mix every enabled audio clip in a project into a 48 kHz stereo buffer.
+/// Source buffers are keyed by the stable media ID used by the project file.
+/// Timeline and source frame positions are converted using the project's
+/// rational frame rate, avoiding floating-point drift for fractional rates.
+pub fn mix_project_audio(
+    project: &kyrocut_core::Project,
+    media_audio: &std::collections::HashMap<String, kyrocut_audio::PcmBuffer>,
+) -> Result<kyrocut_audio::PcmBuffer, MediaError> {
+    project.validate().map_err(|error| MediaError::Project(error.to_string()))?;
+    const SAMPLE_RATE: u32 = 48_000;
+    const CHANNELS: u16 = 2;
+
+    fn frames_to_samples(frames: u64, rate: kyrocut_core::FrameRate) -> Result<usize, MediaError> {
+        let numerator = (frames as u128)
+            .checked_mul(SAMPLE_RATE as u128)
+            .and_then(|value| value.checked_mul(rate.denominator as u128))
+            .ok_or_else(|| MediaError::Audio("audio timeline position overflow".into()))?;
+        let denominator = rate.numerator as u128;
+        let rounded = numerator
+            .checked_add(denominator / 2)
+            .ok_or_else(|| MediaError::Audio("audio timeline position overflow".into()))?
+            / denominator;
+        usize::try_from(rounded)
+            .map_err(|_| MediaError::Audio("audio timeline exceeds addressable memory".into()))
+    }
+
+    let output_frames = frames_to_samples(project.duration_frames(), project.frame_rate)?;
+    let mut clips = Vec::new();
+    for track in &project.tracks {
+        if track.kind != kyrocut_core::TrackKind::Audio || track.muted {
+            continue;
+        }
+        for clip in &track.clips {
+            if !clip.enabled {
+                continue;
+            }
+            let media = project.media.iter().find(|media| media.id == clip.media_id)
+                .ok_or_else(|| MediaError::Project(format!("missing media {}", clip.media_id)))?;
+            if media.kind != kyrocut_core::MediaKind::Audio {
+                return Err(MediaError::Project(format!(
+                    "audio track clip {} references non-audio media {}",
+                    clip.id, media.id
+                )));
+            }
+            let source = media_audio.get(&media.id)
+                .ok_or_else(|| MediaError::Audio(format!("no decoded PCM for media {}", media.id)))?;
+            if source.sample_rate() != SAMPLE_RATE || source.channels() != CHANNELS {
+                return Err(MediaError::Audio(format!(
+                    "media {} must be decoded to 48 kHz stereo PCM", media.id
+                )));
+            }
+            clips.push(kyrocut_audio::AudioClip {
+                source,
+                timeline_start_frame: frames_to_samples(clip.timeline_start.0, project.frame_rate)?,
+                source_in_frame: frames_to_samples(clip.source_in.0, project.frame_rate)?,
+                duration_frames: frames_to_samples(clip.duration_frames, project.frame_rate)?,
+                gain_db: 0.0,
+                pan: 0.0,
+                enabled: true,
+            });
+        }
+    }
+
+    kyrocut_audio::mix_timeline(SAMPLE_RATE, CHANNELS, output_frames, &clips)
+        .map_err(|error| MediaError::Audio(error.to_string()))
+}
+
 /// Evaluate the shared Rust project timeline and composite active video clips
 /// at a timeline frame. Media paths are resolved by stable project media ID.
 /// Audio tracks are intentionally rendered by the separate PCM mixer.
