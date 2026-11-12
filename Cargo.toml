@@ -3,6 +3,7 @@ resolver = "3"
 members = [
   'apps/desktop',
   'crates/kyrocut-core',
+  'crates/kyrocut-render',
 ]
 
 [workspace.package]
