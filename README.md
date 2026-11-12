@@ -67,6 +67,8 @@ Check and test the shared Rust core:
 ```sh
 cargo check -p kyrocut-core
 cargo test -p kyrocut-core
+cargo check -p kyrocut-render
+cargo test -p kyrocut-render
 ```
 
 Build the web app:
