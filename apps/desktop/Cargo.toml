@@ -10,4 +10,5 @@ name = "kyrocut-x1-desktop"
 path = "src/main.rs"
 
 [dependencies]
-gpui = { workspace = true }\nkyrocut-core = { workspace = true }
+gpui = { workspace = true }
+kyrocut-core = { workspace = true }
