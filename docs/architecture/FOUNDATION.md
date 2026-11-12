@@ -49,7 +49,11 @@ Maps timeline frame positions to active clips, source frames, track state, trans
 
 Represents source nodes, transforms, masks, effects, compositing and output targets. The first CPU RGBA compositor now provides source-over compositing and Normal/Multiply/Screen/Add blend modes. It currently expects same-sized RGBA8 layers and operates on encoded channel values; transforms, masks, linear-light color management, GPU backends and video-frame integration remain future work.
 
-### Animation evaluator\n\nThe core currently evaluates frame-addressed scalar curves with Hold, Linear, SmoothStep and cubic-Bezier interpolation. Property binding, vector/color curves, graph-editor UI and expression evaluation remain future work.\n\n### Audio graph
+### Animation evaluator
+
+The core currently evaluates frame-addressed scalar curves with Hold, Linear, SmoothStep and cubic-Bezier interpolation. Property binding, vector/color curves, graph-editor UI and expression evaluation remain future work.
+
+### Audio graph
 
 Owns sample-accurate scheduling, mixing, gain automation, effects and output device integration.
 
