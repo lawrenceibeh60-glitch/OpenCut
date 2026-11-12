@@ -171,11 +171,11 @@ pub struct Resolution {
     pub height: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 fn default_project_id() -> String { "project-1".to_owned() }
 fn default_application_name() -> String { "KYROCUT X1".to_owned() }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectDocument {
     pub format: String,
     pub version: u32,
