@@ -242,6 +242,12 @@ mod tests {
     }
 
     #[test]
+    fn project_frame_rate_maps_to_source_rate_without_float_drift() {
+        assert_eq!(project_frame_to_source_frame(60, kyrocut_core::FrameRate::FPS_30, "60/1").unwrap(), 120);
+        assert_eq!(project_frame_to_source_frame(30, kyrocut_core::FrameRate::FPS_30, "24000/1001").unwrap(), 23);
+        assert_eq!(project_frame_to_source_frame(30, kyrocut_core::FrameRate::FPS_30, "0/0").unwrap(), 30);
+    }
+    #[test]
     fn error_types_are_displayable() {
         assert!(MediaError::MissingVideoStream.to_string().contains("no video stream"));
     }
@@ -419,6 +425,32 @@ pub fn mix_project_audio(
         .map_err(|error| MediaError::Audio(error.to_string()))
 }
 
+/// Convert a project-time frame to the corresponding source presentation frame.
+/// Invalid or variable-rate metadata falls back to the project frame rate.
+fn project_frame_to_source_frame(
+    project_frame: u64,
+    project_rate: kyrocut_core::FrameRate,
+    source_rate: &str,
+) -> Result<usize, MediaError> {
+    let parsed = source_rate.split_once('/').and_then(|(n, d)| {
+        let numerator = n.parse::<u64>().ok()?;
+        let denominator = d.parse::<u64>().ok()?;
+        if numerator == 0 || denominator == 0 { return None; }
+        Some((numerator, denominator))
+    });
+    let (source_numerator, source_denominator) = parsed.unwrap_or((
+        project_rate.numerator as u64, project_rate.denominator as u64,
+    ));
+    let numerator = (project_frame as u128)
+        .checked_mul(project_rate.denominator as u128)
+        .and_then(|value| value.checked_mul(source_numerator as u128))
+        .ok_or_else(|| MediaError::InvalidFrame("source frame conversion overflow".into()))?;
+    let denominator = (project_rate.numerator as u128)
+        .checked_mul(source_denominator as u128)
+        .ok_or_else(|| MediaError::InvalidFrame("source frame conversion overflow".into()))?;
+    usize::try_from(numerator / denominator)
+        .map_err(|_| MediaError::InvalidFrame("source frame exceeds addressable memory".into()))
+}
 /// Evaluate the shared Rust project timeline and composite active video clips
 /// at a timeline frame. Media paths are resolved by stable project media ID.
 /// Audio tracks are intentionally rendered by the separate PCM mixer.
@@ -438,9 +470,15 @@ pub fn render_timeline_video_frame(
         let media = project.media.iter().find(|media| media.id == active.clip.media_id)
             .ok_or_else(|| MediaError::Project(format!("missing media {}", active.clip.media_id)))?;
         if !matches!(media.kind, kyrocut_core::MediaKind::Video | kyrocut_core::MediaKind::Image) { continue; }
-        let source_frame = if media.kind == kyrocut_core::MediaKind::Image { 0 } else { active.source_frame.0 as usize };
         let path = media_paths.get(&media.id)
             .ok_or_else(|| MediaError::Open(format!("no linked file for media {}", media.id)))?;
+        let source_frame = if media.kind == kyrocut_core::MediaKind::Image {
+            0
+        } else {
+            let info = probe(path)?;
+            let source_rate = info.video.as_ref().map(|video| video.average_frame_rate.as_str()).unwrap_or("0/0");
+            project_frame_to_source_frame(active.source_frame.0, project.frame_rate, source_rate)?
+        };
         let frame = decode_video_frame_at(path, source_frame)?;
         let image = kyrocut_render::RgbaImage::new(frame.width, frame.height, frame.rgba)
             .map_err(|error| MediaError::Render(error.to_string()))?;
