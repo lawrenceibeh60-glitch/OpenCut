@@ -39,7 +39,7 @@ function Editor() {
   const [playing, setPlaying] = useState(false)
   const [activeTab, setActiveTab] = useState<'media' | 'effects' | 'text'>('media')
   const [projectName, setProjectName] = useState('Untitled project')
-  const [projectId, setProjectId] = useState(createId())
+  const [projectId, setProjectId] = useState<string>(createId())
   const [projectFrameRate, setProjectFrameRate] = useState<RationalFrameRate>(SEQUENCE_FRAME_RATE)
   const [projectResolution, setProjectResolution] = useState({ width: 1920, height: 1080 })
   const [notice, setNotice] = useState('Import media to begin editing')
