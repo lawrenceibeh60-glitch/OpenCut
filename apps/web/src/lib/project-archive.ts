@@ -13,13 +13,22 @@ export type DecodedProjectArchive = {
   media: Map<string, Blob>
 }
 
-function crc32(bytes: Uint8Array): number {
+async function crc32Blob(blob: Blob): Promise<number> {
   let crc = 0xffffffff
-  for (const byte of bytes) {
-    crc ^= byte
-    for (let bit = 0; bit < 8; bit += 1) {
-      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0)
+  const reader = blob.stream().getReader()
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      for (const byte of value) {
+        crc ^= byte
+        for (let bit = 0; bit < 8; bit += 1) {
+          crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0)
+        }
+      }
     }
+  } finally {
+    reader.releaseLock()
   }
   return (crc ^ 0xffffffff) >>> 0
 }
@@ -54,14 +63,14 @@ export async function encodeProjectArchive(
 
   let offset = 0
   const output: BlobPart[] = []
-  const central: Uint8Array[] = []
+  const central: Array<{ part: ArrayBuffer; size: number }> = []
   for (const entry of entries) {
     const nameBytes = encoder.encode(entry.name)
     if (nameBytes.length > 0xffff || entry.blob.size > MAX_ZIP32_SIZE) {
       throw new Error('A project archive entry exceeds the supported ZIP32 size')
     }
-    const bytes = new Uint8Array(await entry.blob.arrayBuffer())
-    const checksum = crc32(bytes)
+    const size = entry.blob.size
+    const checksum = await crc32Blob(entry.blob)
     const local = new Uint8Array(30 + nameBytes.length)
     const localView = new DataView(local.buffer)
     write32(localView, 0, ZIP_LOCAL)
@@ -69,11 +78,11 @@ export async function encodeProjectArchive(
     write16(localView, 6, UTF8_FLAG)
     write16(localView, 8, 0)
     write32(localView, 14, checksum)
-    write32(localView, 18, bytes.length)
-    write32(localView, 22, bytes.length)
+    write32(localView, 18, size)
+    write32(localView, 22, size)
     write16(localView, 26, nameBytes.length)
     local.set(nameBytes, 30)
-    output.push(local, new Uint8Array(bytes).buffer as ArrayBuffer)
+    output.push(local.buffer as ArrayBuffer, entry.blob)
     const directory = new Uint8Array(46 + nameBytes.length)
     const directoryView = new DataView(directory.buffer)
     write32(directoryView, 0, ZIP_CENTRAL)
@@ -82,30 +91,29 @@ export async function encodeProjectArchive(
     write16(directoryView, 8, UTF8_FLAG)
     write16(directoryView, 10, 0)
     write32(directoryView, 16, checksum)
-    write32(directoryView, 20, bytes.length)
-    write32(directoryView, 24, bytes.length)
+    write32(directoryView, 20, size)
+    write32(directoryView, 24, size)
     write16(directoryView, 28, nameBytes.length)
     write32(directoryView, 42, offset)
     directory.set(nameBytes, 46)
-    central.push(directory)
-    files.push({ name: entry.name, blob: entry.blob, crc: checksum, size: bytes.length, nameBytes, offset })
-    offset += local.length + bytes.length
+    central.push({ part: directory.buffer as ArrayBuffer, size: directory.length })
+    offset += local.length + size
     if (offset > MAX_ZIP32_SIZE) throw new Error('This project is too large for the supported ZIP32 archive format')
   }
   const centralOffset = offset
   for (const directory of central) {
-    output.push(directory)
-    offset += directory.length
+    output.push(directory.part)
+    offset += directory.size
   }
   const centralSize = offset - centralOffset
-  if (files.length > 0xffff || offset > MAX_ZIP32_SIZE) {
+  if (entries.length > 0xffff || offset > MAX_ZIP32_SIZE) {
     throw new Error('This project contains too many files or exceeds the supported archive size')
   }
   const end = new Uint8Array(22)
   const endView = new DataView(end.buffer)
   write32(endView, 0, ZIP_END)
-  write16(endView, 8, files.length)
-  write16(endView, 10, files.length)
+  write16(endView, 8, entries.length)
+  write16(endView, 10, entries.length)
   write32(endView, 12, centralSize)
   write32(endView, 16, centralOffset)
   output.push(end)
@@ -173,8 +181,7 @@ export async function decodeProjectArchive(file: Blob): Promise<DecodedProjectAr
     const extraLength = header.getUint16(28, true)
     const start = record.offset + 30 + nameLength + extraLength
     const blob = file.slice(start, start + record.size, asset.mimeType || 'application/octet-stream')
-    const bytes = new Uint8Array(await blob.arrayBuffer())
-    if (crc32(bytes) !== record.crc) throw new Error(`Media archive entry failed integrity validation: ${asset.name}`)
+    if (await crc32Blob(blob) !== record.crc) throw new Error(`Media archive entry failed integrity validation: ${asset.name}`)
     media.set(asset.id, blob)
   }
   return { manifest, media }
