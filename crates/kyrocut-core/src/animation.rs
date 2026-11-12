@@ -2,9 +2,12 @@
 
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 use crate::Frame;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Interpolation {
     Hold,
     Linear,
@@ -15,7 +18,8 @@ pub enum Interpolation {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ScalarKeyframe {
     pub frame: Frame,
     pub value: f64,
@@ -23,7 +27,8 @@ pub struct ScalarKeyframe {
     pub interpolation: Interpolation,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ScalarCurve {
     keyframes: Vec<ScalarKeyframe>,
 }
@@ -196,6 +201,21 @@ mod tests {
             key(10, 1.0, Interpolation::Linear),
         ]);
         assert_eq!(result, Err(CurveError::NonIncreasingFrames));
+    }
+
+
+    #[test]
+    fn animation_curve_serializes_for_portable_project_documents() {
+        let curve = ScalarCurve::new(vec![
+            key(0, 0.0, Interpolation::CubicBezier {
+                out_control: [0.25, 0.1], in_control: [0.75, 0.9],
+            }),
+            key(48, 100.0, Interpolation::Linear),
+        ]).unwrap();
+        let json = serde_json::to_string(&curve).unwrap();
+        let reopened: ScalarCurve = serde_json::from_str(&json).unwrap();
+        assert_eq!(reopened, curve);
+        assert_eq!(reopened.evaluate(Frame(24)), curve.evaluate(Frame(24)));
     }
 
     #[test]
