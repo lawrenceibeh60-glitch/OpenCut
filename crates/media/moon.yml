@@ -1,0 +1,27 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'rust'
+layer: 'library'
+
+tasks:
+  check:
+    command: 'cargo check -p kyrocut-media'
+    inputs:
+      - 'src/**/*'
+      - 'Cargo.toml'
+      - 'setup/**/*'
+      - '/Cargo.toml'
+      - '/Cargo.lock'
+    options:
+      runInCI: false
+
+  test:
+    command: 'cargo test -p kyrocut-media'
+    inputs:
+      - 'src/**/*'
+      - 'Cargo.toml'
+      - 'setup/**/*'
+      - '/Cargo.toml'
+      - '/Cargo.lock'
+    options:
+      runInCI: false
