@@ -25,7 +25,7 @@ function crc32(bytes: Uint8Array): number {
 }
 
 function safeFilename(name: string): string {
-  const cleaned = name.replace(/[\\/]/g, '_').replace(/[\\x00-\\x1f]/g, '').trim()
+  const cleaned = name.replace(/[\\/]/g, '_').replace(/[\x00-\x1f]/g, '').trim()
   return cleaned && cleaned !== '.' && cleaned !== '..' ? cleaned.slice(0, 180) : 'media.bin'
 }
 
