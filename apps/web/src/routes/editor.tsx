@@ -10,9 +10,10 @@ import './editor.css'
 export const Route = createFileRoute('/editor')({ component: Editor })
 
 type MediaKind = 'video' | 'audio' | 'image'
-type MediaAsset = { id: string; name: string; kind: MediaKind; url: string; size: number; duration: number; mimeType: string }
+type MediaAsset = { id: string; name: string; kind: MediaKind; url: string; size: number; duration: number; mimeType: string; missing?: boolean }
 type TimelineClip = { id: string; mediaId: string; start: number; sourceIn: number; duration: number }
 type TimelineTrack = { id: string; name: string; kind: 'video' | 'audio' | 'graphics'; clips: TimelineClip[]; muted: boolean; locked: boolean }
+type ProjectManifest = { format: string; version: number; name: string; frameRate: { numerator: number; denominator: number }; media: Array<{ id: string; name: string; kind: MediaKind; size: number; durationFrames: number; mimeType: string }>; tracks: Array<{ id: string; name: string; kind: TimelineTrack['kind']; muted: boolean; locked: boolean; clips: Array<{ id: string; mediaId: string; timelineStartFrame: number; sourceInFrame: number; durationFrames: number }> }>; playheadFrame: number }
 
 const createId = () => globalThis.crypto?.randomUUID?.() ?? `kyro-${Date.now()}-${Math.random().toString(16).slice(2)}`
 const formatTime = (seconds: number) => {
@@ -35,6 +36,8 @@ function Editor() {
   const [projectName, setProjectName] = useState('Untitled project')
   const [notice, setNotice] = useState('Import media to begin editing')
   const fileInput = useRef<HTMLInputElement>(null)
+  const projectInput = useRef<HTMLInputElement>(null)
+  const relinkInput = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
   const objectUrls = useRef<string[]>([])
@@ -45,6 +48,7 @@ function Editor() {
   const selectedAsset = assets.find((asset) => asset.id === selectedClip?.mediaId) ?? null
   const projectDuration = Math.max(30, ...allClips.map((clip) => clip.start + clip.duration))
   const selectedTrack = tracks.find((track) => track.clips.some((clip) => clip.id === selectedClipId))
+  const missingAssets = assets.filter((asset) => !asset.url)
 
   useEffect(() => {
     const sourceTime = selectedClip ? selectedClip.sourceIn + Math.max(0, playhead - selectedClip.start) : 0
@@ -132,6 +136,42 @@ function Editor() {
     URL.revokeObjectURL(url)
     setNotice('Project file saved. Media files remain separate and can be relinked when reopened.')
   }
+  const openProject = async (file: File) => {
+    try {
+      const manifest = JSON.parse(await file.text()) as ProjectManifest
+      if (manifest.format !== 'kyrocut-project' || manifest.version !== 1 || !Array.isArray(manifest.media) || !Array.isArray(manifest.tracks)) {
+        setNotice('This is not a supported KYROCUT X1 project file')
+        return
+      }
+      const fps = manifest.frameRate?.numerator && manifest.frameRate?.denominator ? manifest.frameRate.numerator / manifest.frameRate.denominator : 30
+      setAssets(manifest.media.map((asset) => ({ id: asset.id, name: asset.name, kind: asset.kind, url: '', size: asset.size ?? 0, duration: (asset.durationFrames ?? 0) / fps, mimeType: asset.mimeType ?? '', missing: true })))
+      setTracks(manifest.tracks.map((track) => ({
+        id: track.id, name: track.name, kind: track.kind, muted: Boolean(track.muted), locked: Boolean(track.locked),
+        clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, start: clip.timelineStartFrame / fps, sourceIn: clip.sourceInFrame / fps, duration: clip.durationFrames / fps })),
+      })))
+      setProjectName(manifest.name || file.name.replace('.kcx1', ''))
+      setPlayhead((manifest.playheadFrame ?? 0) / fps)
+      setSelectedClipId(null)
+      setPlaying(false)
+      setNotice('Opened ' + file.name + '. Relink the ' + manifest.media.length + ' source media item(s) to preview them.')
+    } catch {
+      setNotice('Could not read this project file. Check that it is valid JSON.')
+    }
+  }
+
+  const relinkMedia = (files: FileList | File[]) => {
+    const candidates = Array.from(files)
+    let linked = 0
+    for (const asset of missingAssets) {
+      const file = candidates.find((candidate) => candidate.name.toLowerCase() === asset.name.toLowerCase())
+      if (!file) continue
+      const url = URL.createObjectURL(file)
+      objectUrls.current.push(url)
+      setAssets((current) => current.map((item) => item.id === asset.id ? { ...item, url, size: file.size, mimeType: file.type, missing: false } : item))
+      linked += 1
+    }
+    setNotice(linked ? 'Relinked ' + linked + ' media item(s)' : 'No matching filenames found. Rename the source files or import them individually.')
+  }
   const togglePlayback = () => {
     if (!selectedClip || !selectedAsset) { setNotice('Select a timeline clip to preview it'); return }
     if (selectedAsset.kind === 'video' && videoRef.current) {
@@ -152,6 +192,8 @@ function Editor() {
         <a className="kx-brand" href="/" aria-label="KYROCUT X1 home"><span className="kx-brand-mark"><Clapperboard size={19} /></span><span>KYROCUT <b>X1</b></span></a>
         <div className="kx-project-title"><input aria-label="Project name" value={projectName} onChange={(event) => setProjectName(event.target.value)} /><span className="kx-save-state">LOCAL PROJECT</span></div>
         <div className="kx-top-actions">
+          <button className="kx-button kx-button-quiet" onClick={() => projectInput.current?.click()}><FolderOpen size={15} /> Open</button>
+          <input ref={projectInput} hidden type="file" accept=".kcx1,application/json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openProject(file); event.target.value = '' }} />
           <button className="kx-button kx-button-quiet" onClick={saveProject}><Save size={15} /> Save project</button>
           <button className="kx-button kx-button-primary" onClick={() => setNotice('Video rendering is not wired yet; the shared media renderer is the next engine milestone.')}><Sparkles size={15} /> Render</button>
         </div>
@@ -174,10 +216,11 @@ function Editor() {
               <Upload size={21} /><strong>Import media</strong><span>Video, audio and image files</span>
             </div>
             <div className="kx-section-label">PROJECT ASSETS <span>{assets.length}</span></div>
+            {missingAssets.length > 0 && <div className="kx-relink-box"><span>{missingAssets.length} OFFLINE SOURCE(S)</span><button onClick={() => relinkInput.current?.click()}>Relink media</button><input ref={relinkInput} hidden multiple type="file" accept="video/*,audio/*,image/*" onChange={(event) => { if (event.target.files) relinkMedia(event.target.files); event.target.value = '' }} /></div>}
             {assets.length === 0 ? <div className="kx-empty-small"><ImagePlus size={23} /><span>Your imported media will appear here.</span></div> : <div className="kx-asset-list">
               {assets.map((asset) => <div className="kx-asset" key={asset.id}>
                 <span className={`kx-asset-icon ${asset.kind}`}>{asset.kind === 'video' ? <Video size={16} /> : asset.kind === 'audio' ? <Music2 size={16} /> : <ImagePlus size={16} />}</span>
-                <span className="kx-asset-copy"><strong>{asset.name}</strong><small>{asset.kind.toUpperCase()} · {asset.duration.toFixed(1)}s</small></span>
+                <span className="kx-asset-copy"><strong>{asset.name}</strong><small>{asset.missing ? 'OFFLINE · RELINK REQUIRED' : asset.kind.toUpperCase() + ' · ' + asset.duration.toFixed(1) + 's'}</small></span>
                 <button className="kx-add-asset" title="Add to timeline" onClick={() => addAssetToTimeline(asset)}><Plus size={15} /></button>
               </div>)}
             </div>}
@@ -190,7 +233,7 @@ function Editor() {
           <div className="kx-preview-panel">
             <div className="kx-panel-title"><span>COMPOSITION VIEWER</span><span>1920 × 1080 <i>·</i> 30 FPS</span></div>
             <div className="kx-preview-stage">
-              {selectedAsset?.kind === 'video' ? <video ref={videoRef} src={selectedAsset.url} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onTimeUpdate={(event) => { if (selectedClip) setPlayhead(selectedClip.start + event.currentTarget.currentTime - selectedClip.sourceIn) }} controls={false} /> :
+              {selectedAsset && !selectedAsset.url ? <div className="kx-preview-empty"><FolderOpen size={30} /><strong>MEDIA OFFLINE</strong><span>RELINK THE SOURCE FILE TO PREVIEW</span></div> : selectedAsset?.kind === 'video' ? <video ref={videoRef} src={selectedAsset.url} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onTimeUpdate={(event) => { if (selectedClip) setPlayhead(selectedClip.start + event.currentTarget.currentTime - selectedClip.sourceIn) }} controls={false} /> :
                 selectedAsset?.kind === 'image' ? <img src={selectedAsset.url} alt={selectedAsset.name} /> :
                   selectedAsset?.kind === 'audio' ? <div className="kx-audio-preview"><AudioLines size={54} /><strong>{selectedAsset.name}</strong><span>Audio source preview</span><audio ref={audioRef} src={selectedAsset.url} controls onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onTimeUpdate={(event) => { if (selectedClip) setPlayhead(selectedClip.start + event.currentTarget.currentTime - selectedClip.sourceIn) }} /></div> :
                     <div className="kx-preview-empty"><div className="kx-preview-logo"><Clapperboard size={32} /></div><strong>KYROCUT X1</strong><span>CREATIVE VIEWPORT</span><small>Select a clip to preview your composition</small></div>}
