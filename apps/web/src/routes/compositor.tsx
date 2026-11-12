@@ -48,6 +48,7 @@ function validate(graph: Graph): string[] {
 }
 function Compositor(){
  const [graph,setGraph]=useState<Graph>(base),[layout,setLayout]=useState<Layout>(baseLayout),[selectedId,setSelectedId]=useState('grade-1'),[armed,setArmed]=useState<Endpoint|null>(null),[notice,setNotice]=useState('Select an output socket, then a matching input socket.'),[frame,setFrame]=useState(0),[saved,setSaved]=useState(false),[drag,setDrag]=useState<{id:string;dx:number;dy:number}|null>(null)
+ const canvasRef=useRef<HTMLDivElement>(null)
  const selected=graph.nodes.find(n=>n.id===selectedId)||null, errors=useMemo(()=>validate(graph),[graph])
  useEffect(()=>{try{const raw=localStorage.getItem('kyrocut-x1:compositor');if(raw){const v=JSON.parse(raw);if(v.graph?.nodes&&v.graph?.connections){setGraph(v.graph);setLayout(v.layout||baseLayout);setNotice('Restored compositor workspace.')}}}catch{setNotice('Saved graph was invalid; loaded a clean composition.')}},[])
  useEffect(()=>{if(!drag)return;const move=(e:PointerEvent)=>{const bounds=canvasRef.current?.getBoundingClientRect();const sx=canvasRef.current?.scrollLeft||0,sy=canvasRef.current?.scrollTop||0;setLayout(v=>({...v,[drag.id]:{x:Math.max(0,e.clientX-(bounds?.left||0)+sx-drag.dx),y:Math.max(0,e.clientY-(bounds?.top||0)+sy-drag.dy)}}))};const up=()=>setDrag(null);window.addEventListener('pointermove',move);window.addEventListener('pointerup',up,{once:true});return()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up)}},[drag])
