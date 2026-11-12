@@ -37,6 +37,8 @@ function Editor() {
   const fileInput = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
+  const objectUrls = useRef<string[]>([])
+  useEffect(() => () => objectUrls.current.forEach((url) => URL.revokeObjectURL(url)), [])
 
   const allClips = useMemo(() => tracks.flatMap((track) => track.clips.map((clip) => ({ ...clip, trackId: track.id }))), [tracks])
   const selectedClip = allClips.find((clip) => clip.id === selectedClipId) ?? null
@@ -68,7 +70,9 @@ function Editor() {
           probe.src = probeUrl
         })
       }
-      additions.push({ id: createId(), name: file.name, kind, url: URL.createObjectURL(file), size: file.size, duration: duration || 8, mimeType: file.type })
+      const assetUrl = URL.createObjectURL(file)
+      objectUrls.current.push(assetUrl)
+      additions.push({ id: createId(), name: file.name, kind, url: assetUrl, size: file.size, duration: duration || 8, mimeType: file.type })
     }
     setAssets((current) => [...current, ...additions])
     setNotice(`Imported ${additions.length} media item${additions.length === 1 ? '' : 's'}`)
