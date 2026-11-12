@@ -3568,7 +3568,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "opencut-desktop"
+name = "kyrocut-x1-desktop"
 version = "0.1.0"
 dependencies = [
  "gpui",
