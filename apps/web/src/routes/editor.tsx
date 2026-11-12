@@ -3,8 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import { framesToSeconds, secondsToFrames, SEQUENCE_FRAME_RATE } from '../lib/timebase'
 import type { RationalFrameRate } from '../lib/timebase'
-import { parseProjectManifest } from '../lib/project-format'
+import { parseProjectManifest, type ProjectManifest } from '../lib/project-format'
 import { getMediaBlob, saveMediaBlob } from '../lib/media-storage'
+import { decodeProjectArchive, encodeProjectArchive, isProjectArchive } from '../lib/project-archive'
 import {
   AudioLines, ChevronDown, Clapperboard, Film, FolderOpen, ImagePlus, Layers3,
   Minus, Music2, Pause, Play, Plus, Save, Scissors, Settings2, Sparkles, Trash2,
@@ -288,26 +289,61 @@ function Editor() {
     const number = tracks.filter((track) => track.kind === kind).length + 1
     setTracks((current) => [...current, { id: createId(), name: `${prefix}${number}`, kind, clips: [], muted: false, locked: false }])
   }
-  const saveProject = () => {
-    const blob = new Blob([JSON.stringify(projectDocument, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `${projectName.trim().replace(/[^a-z0-9-_]+/gi, '-').toLowerCase() || 'kyrocut-project'}.kcx1`
-    anchor.click()
-    URL.revokeObjectURL(url)
-    setNotice('Project file saved. Media files remain separate and can be relinked when reopened.')
+  const saveProject = async () => {
+    try {
+      const bundledMedia = new Map<string, Blob>()
+      let unavailable = 0
+      for (const asset of assets) {
+        let blob = await getMediaBlob(asset.id).catch(() => null)
+        if (!blob && asset.url) {
+          try {
+            const response = await fetch(asset.url)
+            if (response.ok) blob = await response.blob()
+          } catch {
+            // A revoked or unavailable object URL is reported as missing below.
+          }
+        }
+        if (blob) bundledMedia.set(asset.id, blob)
+        else unavailable += 1
+      }
+      const archive = await encodeProjectArchive(projectDocument as ProjectManifest, bundledMedia)
+      const url = URL.createObjectURL(archive)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${projectName.trim().replace(/[^a-z0-9-_]+/gi, '-').toLowerCase() || 'kyrocut-project'}.kcx1`
+      anchor.click()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      setNotice(unavailable
+        ? `Portable project saved with ${bundledMedia.size} media file(s); ${unavailable} unavailable source(s) remain offline.`
+        : `Portable project saved with all ${bundledMedia.size} media file(s) bundled.`)
+    } catch (error) {
+      setNotice(error instanceof Error ? `Project save failed: ${error.message}` : 'Project save failed. Your current project remains open.')
+    }
   }
   const openProject = async (file: File) => {
     try {
-      const manifest = parseProjectManifest(await file.text())
+      let manifest
+      let bundledMedia = new Map<string, Blob>()
+      const archived = await isProjectArchive(file)
+      if (archived) {
+        const decoded = await decodeProjectArchive(file)
+        manifest = decoded.manifest
+        bundledMedia = decoded.media
+      } else {
+        manifest = parseProjectManifest(await file.text())
+      }
       if (manifest.format !== 'kyrocut-project' || manifest.version !== 1 || !Array.isArray(manifest.media) || !Array.isArray(manifest.tracks)) {
         setNotice('This is not a supported KYROCUT X1 project file')
         return
       }
       const frameRate = manifest.frameRate?.numerator && manifest.frameRate?.denominator ? manifest.frameRate : SEQUENCE_FRAME_RATE
+      let storageFailures = 0
       const restoredAssets = await Promise.all(manifest.media.map(async (asset) => {
-        const blob = await getMediaBlob(asset.id).catch(() => null)
+        const bundled = bundledMedia.get(asset.id)
+        if (bundled) {
+          try { await saveMediaBlob(asset.id, bundled, asset.name) } catch { storageFailures += 1 }
+        }
+        const blob = bundled ?? await getMediaBlob(asset.id).catch(() => null)
         const url = blob ? URL.createObjectURL(blob) : ''
         if (url) objectUrls.current.push(url)
         return {
@@ -332,11 +368,15 @@ function Editor() {
       setSelectedClipId(null)
       setPlaying(false)
       const offline = restoredAssets.filter((asset) => !asset.url).length
-      setNotice(offline
-        ? 'Opened ' + file.name + '. Relink ' + offline + ' source media item(s) to preview them.'
-        : 'Opened ' + file.name + ' and restored all matching media from browser storage.')
-    } catch {
-      setNotice('Could not read this project file. Check that it is valid JSON.')
+      setNotice(archived
+        ? offline
+          ? `Opened portable project with ${bundledMedia.size} bundled media file(s). ${offline} source(s) still need relinking.`
+          : `Opened portable project and restored ${bundledMedia.size} bundled media file(s).${storageFailures ? ' Browser storage could not retain every file; this session can still use them.' : ''}`
+        : offline
+          ? 'Opened legacy project manifest. Relink ' + offline + ' source media item(s) to preview them.'
+          : 'Opened legacy project and restored matching media from browser storage.')
+    } catch (error) {
+      setNotice(error instanceof Error ? `Could not open project: ${error.message}` : 'Could not read this project file.')
     }
   }
 
