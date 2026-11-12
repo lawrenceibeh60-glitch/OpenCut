@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import { framesToSeconds, secondsToFrames, SEQUENCE_FRAME_RATE } from '../lib/timebase'
 import type { RationalFrameRate } from '../lib/timebase'
-import { parseProjectManifest, type ProjectManifest } from '../lib/project-format'
+import { parseProjectManifest, type ClipEffects, type ProjectManifest } from '../lib/project-format'
 import { getMediaBlob, saveMediaBlob } from '../lib/media-storage'
 import { decodeProjectArchive, encodeProjectArchive, isProjectArchive } from '../lib/project-archive'
 import {
@@ -18,7 +18,7 @@ export const Route = createFileRoute('/editor')({ component: Editor })
 
 type MediaKind = 'video' | 'audio' | 'image'
 type MediaAsset = { id: string; name: string; kind: MediaKind; url: string; size: number; duration: number; durationKnown: boolean; mimeType: string; missing?: boolean }
-type TimelineClip = { id: string; mediaId: string; start: number; sourceIn: number; duration: number; enabled: boolean }
+type TimelineClip = { id: string; mediaId: string; start: number; sourceIn: number; duration: number; enabled: boolean; effects?: ClipEffects }
 type TimelineTrack = { id: string; name: string; kind: 'video' | 'audio' | 'graphics' | 'adjustment'; clips: TimelineClip[]; muted: boolean; locked: boolean }
 
 const createId = () => globalThis.crypto?.randomUUID?.() ?? `kyro-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -28,6 +28,7 @@ const formatTime = (seconds: number, rate: RationalFrameRate = SEQUENCE_FRAME_RA
 }
 const mediaKind = (file: File): MediaKind | null => file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('image/') ? 'image' : null
 const formatFrameRate = (rate: RationalFrameRate) => `${Number((rate.numerator / rate.denominator).toFixed(3))} FPS`
+const DEFAULT_CLIP_EFFECTS: ClipEffects = { brightness: 100, contrast: 100, saturation: 100, blur: 0, grayscale: 0, sepia: 0, hueRotate: 0, opacity: 100 }
 
 function Editor() {
   const [assets, setAssets] = useState<MediaAsset[]>([])
@@ -90,7 +91,7 @@ function Editor() {
                 id: clip.id, mediaId: clip.mediaId,
                 start: framesToSeconds(clip.timelineStartFrame, frameRate),
                 sourceIn: framesToSeconds(clip.sourceInFrame, frameRate),
-                duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled,
+                duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled, effects: clip.effects,
               })),
             })))
             setProjectId(manifest.id ?? createId())
@@ -118,6 +119,9 @@ function Editor() {
   const projectDuration = Math.max(30, ...allClips.filter((clip) => clip.enabled).map((clip) => clip.start + clip.duration))
   const selectedTrack = tracks.find((track) => track.clips.some((clip) => clip.id === selectedClipId))
   const missingAssets = assets.filter((asset) => !asset.url)
+  const selectedEffects = selectedClip?.effects ?? DEFAULT_CLIP_EFFECTS
+  const previewFilter = `brightness(${selectedEffects.brightness}%) contrast(${selectedEffects.contrast}%) saturate(${selectedEffects.saturation}%) blur(${selectedEffects.blur}px) grayscale(${selectedEffects.grayscale}%) sepia(${selectedEffects.sepia}%) hue-rotate(${selectedEffects.hueRotate}deg)`
+  const updateEffect = (patch: Partial<ClipEffects>) => updateSelectedClip({ effects: { ...selectedEffects, ...patch } })
 
   const projectDocument = useMemo(() => ({
     format: 'kyrocut-project', version: 1, application: 'KYROCUT X1',
@@ -134,6 +138,7 @@ function Editor() {
         sourceInFrame: secondsToFrames(clip.sourceIn, projectFrameRate),
         durationFrames: Math.max(1, secondsToFrames(clip.duration, projectFrameRate)),
         enabled: clip.enabled,
+        ...(clip.effects ? { effects: clip.effects } : {}),
       })),
     })),
     playheadFrame: secondsToFrames(playhead, projectFrameRate),
@@ -493,7 +498,21 @@ function Editor() {
               </div>)}
             </div>}
           </div>}
-          {activeTab === 'effects' && <div className="kx-placeholder-list"><strong>Effects library</strong><p>Effect processing is being connected to the shared render graph. No fake effects are exposed in this build.</p></div>}
+          {activeTab === 'effects' && <div className="kx-inspector-content">
+            {selectedClip ? <>
+              <div className="kx-section-label">LIVE CLIP EFFECTS</div>
+              <p className="kx-effect-note">These non-destructive adjustments are applied to the selected video or image preview and saved with the project.</p>
+              <label className="kx-field"><span>Brightness · {selectedEffects.brightness}%</span><input type="range" min="0" max="200" value={selectedEffects.brightness} onChange={(event) => updateEffect({ brightness: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Contrast · {selectedEffects.contrast}%</span><input type="range" min="0" max="200" value={selectedEffects.contrast} onChange={(event) => updateEffect({ contrast: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Saturation · {selectedEffects.saturation}%</span><input type="range" min="0" max="200" value={selectedEffects.saturation} onChange={(event) => updateEffect({ saturation: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Blur · {selectedEffects.blur.toFixed(1)}px</span><input type="range" min="0" max="20" step="0.5" value={selectedEffects.blur} onChange={(event) => updateEffect({ blur: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Grayscale · {selectedEffects.grayscale}%</span><input type="range" min="0" max="100" value={selectedEffects.grayscale} onChange={(event) => updateEffect({ grayscale: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Sepia · {selectedEffects.sepia}%</span><input type="range" min="0" max="100" value={selectedEffects.sepia} onChange={(event) => updateEffect({ sepia: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Hue rotation · {selectedEffects.hueRotate}°</span><input type="range" min="0" max="360" value={selectedEffects.hueRotate} onChange={(event) => updateEffect({ hueRotate: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Opacity · {selectedEffects.opacity}%</span><input type="range" min="0" max="100" value={selectedEffects.opacity} onChange={(event) => updateEffect({ opacity: Number(event.target.value) })} /></label>
+              <button onClick={() => updateSelectedClip({ effects: { ...DEFAULT_CLIP_EFFECTS } })}>Reset effects</button>
+            </> : <div className="kx-empty-small"><WandSparkles size={22} /><span>Select a video or image clip to edit its live effects.</span></div>}
+          </div>}
           {activeTab === 'text' && <div className="kx-placeholder-list"><strong>Graphics and titles</strong><p>Text and shape layers will use the same timeline and keyframe model as media clips.</p></div>}
         </aside>
 
@@ -501,8 +520,8 @@ function Editor() {
           <div className="kx-preview-panel">
             <div className="kx-panel-title"><span>COMPOSITION VIEWER</span><span>{projectResolution.width} × {projectResolution.height} <i>·</i> {formatFrameRate(projectFrameRate)}</span></div>
             <div className="kx-preview-stage">
-              {selectedAsset && !selectedAsset.url ? <div className="kx-preview-empty"><FolderOpen size={30} /><strong>MEDIA OFFLINE</strong><span>RELINK THE SOURCE FILE TO PREVIEW</span></div> : selectedAsset?.kind === 'video' ? <video ref={videoRef} src={selectedAsset.url} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onTimeUpdate={(event) => { if (selectedClip) { const elapsed = event.currentTarget.currentTime - selectedClip.sourceIn; const clamped = Math.min(selectedClip.duration, Math.max(0, elapsed)); setPlayhead(selectedClip.start + clamped); if (elapsed >= selectedClip.duration) { event.currentTarget.pause(); setPlaying(false) } } }} controls={false} /> :
-                selectedAsset?.kind === 'image' ? <img src={selectedAsset.url} alt={selectedAsset.name} /> :
+              {selectedAsset && !selectedAsset.url ? <div className="kx-preview-empty"><FolderOpen size={30} /><strong>MEDIA OFFLINE</strong><span>RELINK THE SOURCE FILE TO PREVIEW</span></div> : selectedAsset?.kind === 'video' ? <video ref={videoRef} style={{ filter: previewFilter, opacity: selectedEffects.opacity / 100 }} src={selectedAsset.url} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onTimeUpdate={(event) => { if (selectedClip) { const elapsed = event.currentTarget.currentTime - selectedClip.sourceIn; const clamped = Math.min(selectedClip.duration, Math.max(0, elapsed)); setPlayhead(selectedClip.start + clamped); if (elapsed >= selectedClip.duration) { event.currentTarget.pause(); setPlaying(false) } } }} controls={false} /> :
+                selectedAsset?.kind === 'image' ? <img style={{ filter: previewFilter, opacity: selectedEffects.opacity / 100 }} src={selectedAsset.url} alt={selectedAsset.name} /> :
                   selectedAsset?.kind === 'audio' ? <div className="kx-audio-preview"><AudioLines size={54} /><strong>{selectedAsset.name}</strong><span>Audio source preview</span><audio ref={audioRef} src={selectedAsset.url} controls onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onTimeUpdate={(event) => { if (selectedClip) { const elapsed = event.currentTarget.currentTime - selectedClip.sourceIn; const clamped = Math.min(selectedClip.duration, Math.max(0, elapsed)); setPlayhead(selectedClip.start + clamped); if (elapsed >= selectedClip.duration) { event.currentTarget.pause(); setPlaying(false) } } }} /></div> :
                     <div className="kx-preview-empty"><div className="kx-preview-logo"><Clapperboard size={32} /></div><strong>KYROCUT X1</strong><span>CREATIVE VIEWPORT</span><small>Select a clip to preview your composition</small></div>}
             </div>

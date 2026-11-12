@@ -3,6 +3,17 @@ import type { RationalFrameRate } from './timebase'
 export type ProjectMediaKind = 'video' | 'audio' | 'image'
 export type ProjectTrackKind = 'video' | 'audio' | 'graphics' | 'adjustment'
 
+export type ClipEffects = {
+  brightness: number
+  contrast: number
+  saturation: number
+  blur: number
+  grayscale: number
+  sepia: number
+  hueRotate: number
+  opacity: number
+}
+
 export type ProjectManifest = {
   format: 'kyrocut-project'
   version: 1
@@ -33,6 +44,7 @@ export type ProjectManifest = {
       sourceInFrame: number
       durationFrames: number
       enabled: boolean
+      effects?: ClipEffects
     }>
   }>
   playheadFrame: number
@@ -57,6 +69,14 @@ function stringValue(value: unknown, label: string): string {
 function integerValue(value: unknown, label: string, minimum = 0): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < minimum) {
     throw new Error(label + ' must be a safe integer greater than or equal to ' + minimum)
+  }
+  return value
+}
+
+function boundedNumber(value: unknown, label: string, minimum: number, maximum: number, fallback: number): number {
+  if (value === undefined) return fallback
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < minimum || value > maximum) {
+    throw new Error(label + ' must be a finite number between ' + minimum + ' and ' + maximum)
   }
   return value
 }
@@ -143,7 +163,22 @@ export function parseProjectManifest(source: string): ProjectManifest {
       if (source.durationFrames !== null && source.durationFrames > 0 && (durationFrames > source.durationFrames || sourceInFrame > source.durationFrames - durationFrames)) {
         throw new Error('Clip source range exceeds media duration: ' + clipId)
       }
-      return { id: clipId, mediaId, timelineStartFrame, sourceInFrame, durationFrames, enabled: clip.enabled === undefined ? true : booleanValue(clip.enabled, 'Clip enabled state') }
+      const effectsValue = clip.effects === undefined ? undefined : record(clip.effects, 'Clip effects')
+      const effects: ClipEffects | undefined = effectsValue ? {
+        brightness: boundedNumber(effectsValue.brightness, 'Effect brightness', 0, 200, 100),
+        contrast: boundedNumber(effectsValue.contrast, 'Effect contrast', 0, 200, 100),
+        saturation: boundedNumber(effectsValue.saturation, 'Effect saturation', 0, 200, 100),
+        blur: boundedNumber(effectsValue.blur, 'Effect blur', 0, 20, 0),
+        grayscale: boundedNumber(effectsValue.grayscale, 'Effect grayscale', 0, 100, 0),
+        sepia: boundedNumber(effectsValue.sepia, 'Effect sepia', 0, 100, 0),
+        hueRotate: boundedNumber(effectsValue.hueRotate, 'Effect hue rotation', 0, 360, 0),
+        opacity: boundedNumber(effectsValue.opacity, 'Effect opacity', 0, 100, 100),
+      } : undefined
+      return {
+        id: clipId, mediaId, timelineStartFrame, sourceInFrame, durationFrames,
+        enabled: clip.enabled === undefined ? true : booleanValue(clip.enabled, 'Clip enabled state'),
+        ...(effects ? { effects } : {}),
+      }
     })
     return {
       id,
