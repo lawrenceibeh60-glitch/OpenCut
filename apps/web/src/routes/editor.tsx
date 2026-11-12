@@ -40,6 +40,7 @@ function Editor() {
   const [projectName, setProjectName] = useState('Untitled project')
   const [projectId, setProjectId] = useState(createId())
   const [projectFrameRate, setProjectFrameRate] = useState<RationalFrameRate>(SEQUENCE_FRAME_RATE)
+  const [projectResolution, setProjectResolution] = useState({ width: 1920, height: 1080 })
   const [notice, setNotice] = useState('Import media to begin editing')
   const fileInput = useRef<HTMLInputElement>(null)
   const projectInput = useRef<HTMLInputElement>(null)
@@ -189,7 +190,7 @@ function Editor() {
   const saveProject = () => {
     const project = {
       format: 'kyrocut-project', version: 1, application: 'KYROCUT X1', id: projectId, name: projectName,
-      frameRate: projectFrameRate, resolution: { width: 1920, height: 1080 },
+      frameRate: projectFrameRate, resolution: projectResolution,
       media: assets.map(({ id, name, kind, size, duration, durationKnown, mimeType }) => ({ id, name, kind, size, durationFrames: durationKnown ? secondsToFrames(duration, projectFrameRate) : null, mimeType, locator: `media/${name}` })),
       tracks: tracks.map((track) => ({ ...track, clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, timelineStartFrame: secondsToFrames(clip.start, projectFrameRate), sourceInFrame: secondsToFrames(clip.sourceIn, projectFrameRate), durationFrames: Math.max(1, secondsToFrames(clip.duration, projectFrameRate)), enabled: clip.enabled })) })),
       playheadFrame: secondsToFrames(playhead, projectFrameRate),
@@ -212,6 +213,7 @@ function Editor() {
       }
       const frameRate = manifest.frameRate?.numerator && manifest.frameRate?.denominator ? manifest.frameRate : SEQUENCE_FRAME_RATE
       setProjectFrameRate(frameRate)
+      setProjectResolution(manifest.resolution)
       setAssets(manifest.media.map((asset) => ({ id: asset.id, name: asset.name, kind: asset.kind, url: '', size: asset.size ?? 0, duration: framesToSeconds(asset.durationFrames ?? 0, frameRate), durationKnown: asset.durationFrames !== null, mimeType: asset.mimeType ?? '', missing: true })))
       setTracks(manifest.tracks.map((track) => ({
         id: track.id, name: track.name, kind: track.kind, muted: Boolean(track.muted), locked: Boolean(track.locked),
