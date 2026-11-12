@@ -403,7 +403,7 @@ mod tests {
         });
         let document = project.to_document(Frame(48)).unwrap();
         let json = document.to_json().unwrap();
-        assert!(json.contains("\\"timelineStartFrame\\": 15"));
+        assert!(json.contains("\"timelineStartFrame\": 15"));
         let reopened = ProjectDocument::from_json(&json).unwrap();
         assert_eq!(reopened.playhead_frame, Frame(48));
         assert_eq!(reopened.into_project().unwrap(), project);
