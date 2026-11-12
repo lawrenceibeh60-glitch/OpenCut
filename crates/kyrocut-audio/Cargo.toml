@@ -1,0 +1,9 @@
+[package]
+name = "kyrocut-audio"
+description = "PCM mixing and DSP primitives for KYROCUT X1"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
