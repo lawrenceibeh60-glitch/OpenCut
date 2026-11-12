@@ -9,6 +9,7 @@ pub enum EditCommand {
     SetClipEnabled { clip_id: String, enabled: bool },
 }
 
+#[derive(Clone, Copy)]
 enum ClipUpdate {
     Move(Frame),
     Trim(Frame, u64),
