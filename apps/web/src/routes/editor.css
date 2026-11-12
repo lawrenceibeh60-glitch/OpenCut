@@ -150,3 +150,6 @@
 
 .kx-clip.disabled { opacity: .35; filter: grayscale(1); }
 .kx-field input[type='checkbox'] { width: 15px; height: 15px; accent-color: var(--kx-cyan); }
+
+.kx-clip { cursor: grab; }
+.kx-clip:active { cursor: grabbing; }
