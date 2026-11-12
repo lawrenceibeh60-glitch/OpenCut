@@ -83,12 +83,32 @@ pub struct CompositeLayer<'a> {
     pub blend_mode: BlendMode,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Transform2D {
+    /// Destination position of the source anchor, in output pixels.
+    pub position: [f32; 2],
+    /// Independent X/Y scale. Negative values flip the source axis.
+    pub scale: [f32; 2],
+    /// Rotation in radians, clockwise in screen coordinates.
+    pub rotation_radians: f32,
+    /// Source-space anchor in pixels.
+    pub anchor: [f32; 2],
+}
+
+pub struct TransformedLayer<'a> {
+    pub image: &'a RgbaImage,
+    pub transform: Transform2D,
+    pub opacity: f32,
+    pub blend_mode: BlendMode,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum RenderError {
     InvalidDimensions,
     InvalidBufferLength { expected: usize, actual: usize },
     LayerDimensionsMismatch,
     InvalidOpacity,
+    InvalidTransform,
 }
 
 impl fmt::Display for RenderError {
@@ -98,6 +118,7 @@ impl fmt::Display for RenderError {
             Self::InvalidBufferLength { expected, actual } => write!(f, "RGBA buffer length mismatch: expected {expected}, got {actual}"),
             Self::LayerDimensionsMismatch => write!(f, "all compositor layers must match the output dimensions"),
             Self::InvalidOpacity => write!(f, "layer opacity must be finite and between 0 and 1"),
+            Self::InvalidTransform => write!(f, "layer transform values must be finite and scale must be non-zero"),
         }
     }
 }
@@ -123,6 +144,60 @@ pub fn composite(
         }
         for (destination, source) in output.pixels.chunks_exact_mut(4).zip(layer.image.pixels.chunks_exact(4)) {
             blend_pixel(destination, source, layer.opacity, layer.blend_mode);
+        }
+    }
+    Ok(output)
+}
+
+/// Composite differently sized layers with position, scale, rotation and anchor transforms.
+/// Sampling is nearest-neighbour; higher-quality reconstruction filters are a later render stage.
+pub fn composite_transformed(
+    width: u32,
+    height: u32,
+    layers: &[TransformedLayer<'_>],
+) -> Result<RgbaImage, RenderError> {
+    let mut output = RgbaImage::transparent(width, height)?;
+    for layer in layers {
+        let transform = layer.transform;
+        if !layer.opacity.is_finite() || !(0.0..=1.0).contains(&layer.opacity) {
+            return Err(RenderError::InvalidOpacity);
+        }
+        if transform.position.iter().chain(transform.scale.iter()).chain(transform.anchor.iter()).any(|value| !value.is_finite())
+            || !transform.rotation_radians.is_finite()
+            || transform.scale[0].abs() <= f32::EPSILON
+            || transform.scale[1].abs() <= f32::EPSILON
+        {
+            return Err(RenderError::InvalidTransform);
+        }
+        if layer.opacity == 0.0 {
+            continue;
+        }
+
+        let (sin, cos) = transform.rotation_radians.sin_cos();
+        for output_y in 0..height {
+            for output_x in 0..width {
+                let delta_x = output_x as f32 + 0.5 - transform.position[0];
+                let delta_y = output_y as f32 + 0.5 - transform.position[1];
+                let local_x = cos * delta_x + sin * delta_y;
+                let local_y = -sin * delta_x + cos * delta_y;
+                let source_x = local_x / transform.scale[0] + transform.anchor[0];
+                let source_y = local_y / transform.scale[1] + transform.anchor[1];
+                if source_x < 0.0 || source_y < 0.0
+                    || source_x >= layer.image.width as f32
+                    || source_y >= layer.image.height as f32
+                {
+                    continue;
+                }
+                let source_index = ((source_y.floor() as usize * layer.image.width as usize)
+                    + source_x.floor() as usize) * 4;
+                let output_index = ((output_y as usize * width as usize) + output_x as usize) * 4;
+                blend_pixel(
+                    &mut output.pixels[output_index..output_index + 4],
+                    &layer.image.pixels[source_index..source_index + 4],
+                    layer.opacity,
+                    layer.blend_mode,
+                );
+            }
         }
     }
     Ok(output)
@@ -224,6 +299,37 @@ mod tests {
             CompositeLayer { image: &foreground, opacity: 1.0, blend_mode: BlendMode::Add },
         ]).unwrap();
         assert_eq!(result.pixel(0, 0), Some([255, 255, 30, 255]));
+    }
+
+    #[test]
+    fn transformed_compositor_positions_a_source_layer() {
+        let source = RgbaImage::solid(2, 1, [255, 0, 0, 255]).unwrap();
+        let result = composite_transformed(4, 1, &[TransformedLayer {
+            image: &source,
+            transform: Transform2D {
+                position: [1.0, 0.5], scale: [1.0, 1.0],
+                rotation_radians: 0.0, anchor: [0.0, 0.0],
+            },
+            opacity: 1.0, blend_mode: BlendMode::Normal,
+        }]).unwrap();
+        assert_eq!(result.pixel(0, 0), Some([0, 0, 0, 0]));
+        assert_eq!(result.pixel(1, 0), Some([255, 0, 0, 255]));
+        assert_eq!(result.pixel(2, 0), Some([255, 0, 0, 255]));
+        assert_eq!(result.pixel(3, 0), Some([0, 0, 0, 0]));
+    }
+
+    #[test]
+    fn transformed_compositor_rejects_zero_scale() {
+        let source = RgbaImage::solid(1, 1, [255, 255, 255, 255]).unwrap();
+        let result = composite_transformed(1, 1, &[TransformedLayer {
+            image: &source,
+            transform: Transform2D {
+                position: [0.5, 0.5], scale: [0.0, 1.0],
+                rotation_radians: 0.0, anchor: [0.5, 0.5],
+            },
+            opacity: 1.0, blend_mode: BlendMode::Normal,
+        }]);
+        assert_eq!(result, Err(RenderError::InvalidTransform));
     }
 
     #[test]
