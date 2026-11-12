@@ -16,7 +16,7 @@ export const Route = createFileRoute('/editor')({ component: Editor })
 type MediaKind = 'video' | 'audio' | 'image'
 type MediaAsset = { id: string; name: string; kind: MediaKind; url: string; size: number; duration: number; mimeType: string; missing?: boolean }
 type TimelineClip = { id: string; mediaId: string; start: number; sourceIn: number; duration: number }
-type TimelineTrack = { id: string; name: string; kind: 'video' | 'audio' | 'graphics'; clips: TimelineClip[]; muted: boolean; locked: boolean }
+type TimelineTrack = { id: string; name: string; kind: 'video' | 'audio' | 'graphics' | 'adjustment'; clips: TimelineClip[]; muted: boolean; locked: boolean }
 
 const createId = () => globalThis.crypto?.randomUUID?.() ?? `kyro-${Date.now()}-${Math.random().toString(16).slice(2)}`
 const formatTime = (seconds: number) => {
@@ -153,7 +153,7 @@ function Editor() {
     setNotice('Clip removed from timeline')
   }
   const addTrack = (kind: TimelineTrack['kind']) => {
-    const prefix = kind === 'audio' ? 'A' : kind === 'graphics' ? 'G' : 'V'
+    const prefix = kind === 'audio' ? 'A' : kind === 'graphics' ? 'G' : kind === 'adjustment' ? 'ADJ' : 'V'
     const number = tracks.filter((track) => track.kind === kind).length + 1
     setTracks((current) => [...current, { id: createId(), name: `${prefix}${number}`, kind, clips: [], muted: false, locked: false }])
   }
