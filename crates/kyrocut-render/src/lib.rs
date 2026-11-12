@@ -8,7 +8,7 @@ use std::fmt;
 
 mod graph;
 
-pub use graph::{GraphRenderError, render_compositing_graph};
+pub use graph::{GraphRenderError, render_compositing_graph, render_compositing_graph_at_frame};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlendMode {
