@@ -153,3 +153,5 @@
 
 .kx-clip { cursor: grab; }
 .kx-clip:active { cursor: grabbing; }
+
+.kx-project-meta { color: var(--kx-muted); font: 9px 'IBM Plex Mono', monospace; white-space: nowrap; }
