@@ -1,3 +1,4 @@
+import './home.css'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { ArrowUpRight, Clapperboard, Layers3, MonitorPlay, Sparkles, Workflow } from 'lucide-react'
 
