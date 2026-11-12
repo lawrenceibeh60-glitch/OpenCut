@@ -1,0 +1,9 @@
+[package]
+name = "kyrocut-core"
+description = "Shared, platform-independent project and timeline model for KYROCUT X1"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
