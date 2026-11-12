@@ -122,6 +122,31 @@ function Editor() {
       } : clip),
     })))
   }
+  const moveClipOnTimeline = (clipId: string, targetTrackId: string, startSeconds: number) => {
+    const sourceTrack = tracks.find((track) => track.clips.some((clip) => clip.id === clipId))
+    const targetTrack = tracks.find((track) => track.id === targetTrackId)
+    const clip = sourceTrack?.clips.find((item) => item.id === clipId)
+    const asset = assets.find((item) => item.id === clip?.mediaId)
+    if (!sourceTrack || !targetTrack || !clip || !asset) return
+    if (targetTrack.locked) { setNotice('That track is locked'); return }
+    const compatible = asset.kind === 'audio'
+      ? targetTrack.kind === 'audio'
+      : targetTrack.kind === 'video' || (asset.kind === 'image' && targetTrack.kind === 'graphics')
+    if (!compatible) { setNotice('That media type cannot be placed on this track'); return }
+    const snappedStart = framesToSeconds(secondsToFrames(Math.max(0, startSeconds), SEQUENCE_FRAME_RATE), SEQUENCE_FRAME_RATE)
+    setTracks((current) => current.map((track) => {
+      if (track.id === sourceTrack.id && track.id === targetTrack.id) {
+        return { ...track, clips: [...track.clips.filter((item) => item.id !== clipId), { ...clip, start: snappedStart }].sort((a, b) => a.start - b.start) }
+      }
+      if (track.id === sourceTrack.id) return { ...track, clips: track.clips.filter((item) => item.id !== clipId) }
+      if (track.id === targetTrack.id) return { ...track, clips: [...track.clips, { ...clip, start: snappedStart }].sort((a, b) => a.start - b.start) }
+      return track
+    }))
+    setSelectedClipId(clipId)
+    setPlayhead(snappedStart)
+    setNotice('Moved clip to ' + targetTrack.name)
+  }
+
   const splitSelectedClip = () => {
     if (!selectedClip) return
     const relativePlayhead = playhead - selectedClip.start
@@ -308,10 +333,10 @@ function Editor() {
                   <button title={track.muted ? 'Unmute track' : 'Mute track'} onClick={() => setTracks((current) => current.map((item) => item.id === track.id ? { ...item, muted: !item.muted } : item))}><Volume2 size={12} /></button>
                   <button title={track.locked ? 'Unlock track' : 'Lock track'} onClick={() => setTracks((current) => current.map((item) => item.id === track.id ? { ...item, locked: !item.locked } : item))}>{track.locked ? 'L' : 'U'}</button>
                 </div>
-                <div className="kx-track-lane">
+                <div className="kx-track-lane" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const clipId = event.dataTransfer.getData('application/x-kyrocut-clip'); if (clipId) { const bounds = event.currentTarget.getBoundingClientRect(); moveClipOnTimeline(clipId, track.id, (event.clientX - bounds.left) / 12) } }}>
                   {track.clips.map((clip) => {
                     const asset = assets.find((item) => item.id === clip.mediaId)
-                    return <button key={clip.id} className={`kx-clip ${track.kind} ${selectedClipId === clip.id ? 'selected' : ''} ${clip.enabled ? '' : 'disabled'}`} style={{ left: `${clip.start * 12}px`, width: `${Math.max(48, clip.duration * 12)}px` }} onClick={() => { setSelectedClipId(clip.id); setPlayhead(clip.start) }} title={asset?.name ?? 'Missing media'}>
+                    return <button key={clip.id} draggable onDragStart={(event) => { event.dataTransfer.setData('application/x-kyrocut-clip', clip.id); event.dataTransfer.effectAllowed = 'move' }} className={`kx-clip ${track.kind} ${selectedClipId === clip.id ? 'selected' : ''} ${clip.enabled ? '' : 'disabled'}`} style={{ left: `${clip.start * 12}px`, width: `${Math.max(48, clip.duration * 12)}px` }} onClick={() => { setSelectedClipId(clip.id); setPlayhead(clip.start) }} title={asset?.name ?? 'Missing media'}>
                       <span className="kx-clip-wave">{track.kind === 'audio' ? '▂▅▃▇▂▆▃▅▂▇▃▅' : '▥ ▥ ▥ ▥ ▥ ▥'}</span><strong>{asset?.name ?? 'Offline media'}</strong>
                     </button>
                   })}
