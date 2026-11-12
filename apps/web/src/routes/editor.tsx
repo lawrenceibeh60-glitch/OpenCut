@@ -14,7 +14,7 @@ import './editor-extra.css'
 export const Route = createFileRoute('/editor')({ component: Editor })
 
 type MediaKind = 'video' | 'audio' | 'image'
-type MediaAsset = { id: string; name: string; kind: MediaKind; url: string; size: number; duration: number; mimeType: string; missing?: boolean }
+type MediaAsset = { id: string; name: string; kind: MediaKind; url: string; size: number; duration: number; durationKnown: boolean; mimeType: string; missing?: boolean }
 type TimelineClip = { id: string; mediaId: string; start: number; sourceIn: number; duration: number; enabled: boolean }
 type TimelineTrack = { id: string; name: string; kind: 'video' | 'audio' | 'graphics' | 'adjustment'; clips: TimelineClip[]; muted: boolean; locked: boolean }
 
@@ -80,7 +80,7 @@ function Editor() {
       }
       const assetUrl = URL.createObjectURL(file)
       objectUrls.current.push(assetUrl)
-      additions.push({ id: createId(), name: file.name, kind, url: assetUrl, size: file.size, duration: duration || 8, mimeType: file.type })
+      additions.push({ id: createId(), name: file.name, kind, url: assetUrl, size: file.size, duration: duration || 8, durationKnown: kind === 'image' || duration > 0, mimeType: file.type })
     }
     setAssets((current) => [...current, ...additions])
     setNotice(`Imported ${additions.length} media item${additions.length === 1 ? '' : 's'}`)
@@ -105,10 +105,10 @@ function Editor() {
     const asset = assets.find((item) => item.id === selectedClip.mediaId)
     const oneFrame = framesToSeconds(1, SEQUENCE_FRAME_RATE)
     const requestedSourceIn = Math.max(0, patch.sourceIn ?? selectedClip.sourceIn)
-    const sourceIn = asset
+    const sourceIn = asset && asset.durationKnown
       ? Math.min(requestedSourceIn, Math.max(0, asset.duration - oneFrame))
       : requestedSourceIn
-    const maximumDuration = asset
+    const maximumDuration = asset && asset.durationKnown
       ? Math.max(oneFrame, asset.duration - sourceIn)
       : Number.POSITIVE_INFINITY
     const duration = Math.min(
@@ -188,7 +188,7 @@ function Editor() {
     const project = {
       format: 'kyrocut-project', version: 1, application: 'KYROCUT X1', id: projectId, name: projectName,
       frameRate: SEQUENCE_FRAME_RATE, resolution: { width: 1920, height: 1080 },
-      media: assets.map(({ id, name, kind, size, duration, mimeType }) => ({ id, name, kind, size, durationFrames: secondsToFrames(duration, SEQUENCE_FRAME_RATE), mimeType, locator: `media/${name}` })),
+      media: assets.map(({ id, name, kind, size, duration, durationKnown, mimeType }) => ({ id, name, kind, size, durationFrames: durationKnown ? secondsToFrames(duration, SEQUENCE_FRAME_RATE) : null, mimeType, locator: `media/${name}` })),
       tracks: tracks.map((track) => ({ ...track, clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, timelineStartFrame: secondsToFrames(clip.start, SEQUENCE_FRAME_RATE), sourceInFrame: secondsToFrames(clip.sourceIn, SEQUENCE_FRAME_RATE), durationFrames: Math.max(1, secondsToFrames(clip.duration, SEQUENCE_FRAME_RATE)), enabled: clip.enabled })) })),
       playheadFrame: secondsToFrames(playhead, SEQUENCE_FRAME_RATE),
     }
@@ -209,7 +209,7 @@ function Editor() {
         return
       }
       const frameRate = manifest.frameRate?.numerator && manifest.frameRate?.denominator ? manifest.frameRate : SEQUENCE_FRAME_RATE
-      setAssets(manifest.media.map((asset) => ({ id: asset.id, name: asset.name, kind: asset.kind, url: '', size: asset.size ?? 0, duration: framesToSeconds(asset.durationFrames ?? 0, frameRate), mimeType: asset.mimeType ?? '', missing: true })))
+      setAssets(manifest.media.map((asset) => ({ id: asset.id, name: asset.name, kind: asset.kind, url: '', size: asset.size ?? 0, duration: framesToSeconds(asset.durationFrames ?? 0, frameRate), durationKnown: asset.durationFrames !== null, mimeType: asset.mimeType ?? '', missing: true })))
       setTracks(manifest.tracks.map((track) => ({
         id: track.id, name: track.name, kind: track.kind, muted: Boolean(track.muted), locked: Boolean(track.locked),
         clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, start: framesToSeconds(clip.timelineStartFrame, frameRate), sourceIn: framesToSeconds(clip.sourceInFrame, frameRate), duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled })),
