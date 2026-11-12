@@ -14,7 +14,7 @@ KYROCUT X1 is being developed as a shared creative platform with a browser edito
 
 ## Current foundation
 
-- Shared Rust core crate: rational frame-rate handling, frame/time conversion, media references, tracks, clips, project duration, deterministic timeline evaluation, validation, transactional edit commands and bounded undo/redo history.
+- Shared Rust core crate: rational frame-rate handling, frame/time conversion, media references, tracks, clips, project duration, deterministic timeline evaluation, validation, transactional edit commands and bounded undo/redo history, and frame-addressed scalar animation curves with Hold, Linear, SmoothStep and cubic-Bezier interpolation.
 - CPU render crate: RGBA8 image buffers, straight-alpha source-over compositing, opacity and Normal/Multiply/Screen/Add blend modes, with unit tests.
 - Web editor: local media import, media bin, video/image source preview, track creation, clip placement, clip selection, basic timing adjustments, track mute/lock flags, .kcx1 project save/open and filename-based source-media relinking.
 - Browser rational timebase utilities with Vitest coverage for integer and fractional frame rates.
