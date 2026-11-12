@@ -2,9 +2,12 @@
 
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 use crate::Frame;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Interpolation {
     Hold,
     Linear,
@@ -15,7 +18,8 @@ pub enum Interpolation {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ScalarKeyframe {
     pub frame: Frame,
     pub value: f64,
@@ -23,7 +27,8 @@ pub struct ScalarKeyframe {
     pub interpolation: Interpolation,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ScalarCurve {
     keyframes: Vec<ScalarKeyframe>,
 }
@@ -40,7 +45,10 @@ impl fmt::Display for CurveError {
         match self {
             Self::NonFiniteValue => write!(f, "keyframe values and Bezier handles must be finite"),
             Self::NonIncreasingFrames => write!(f, "keyframe frames must be strictly increasing"),
-            Self::InvalidBezierHandles => write!(f, "Bezier x handles must satisfy 0 <= outgoing <= incoming <= 1"),
+            Self::InvalidBezierHandles => write!(
+                f,
+                "Bezier x handles must satisfy 0 <= outgoing <= incoming <= 1"
+            ),
         }
     }
 }
@@ -66,8 +74,16 @@ impl ScalarCurve {
             if index > 0 && self.keyframes[index - 1].frame >= keyframe.frame {
                 return Err(CurveError::NonIncreasingFrames);
             }
-            if let Interpolation::CubicBezier { out_control, in_control } = keyframe.interpolation {
-                if out_control.iter().chain(in_control.iter()).any(|value| !value.is_finite()) {
+            if let Interpolation::CubicBezier {
+                out_control,
+                in_control,
+            } = keyframe.interpolation
+            {
+                if out_control
+                    .iter()
+                    .chain(in_control.iter())
+                    .any(|value| !value.is_finite())
+                {
                     return Err(CurveError::NonFiniteValue);
                 }
                 if !(0.0..=1.0).contains(&out_control[0])
@@ -104,9 +120,10 @@ impl ScalarCurve {
                     Interpolation::Hold => 0.0,
                     Interpolation::Linear => progress,
                     Interpolation::SmoothStep => progress * progress * (3.0 - 2.0 * progress),
-                    Interpolation::CubicBezier { out_control, in_control } => {
-                        cubic_bezier_ease(progress, out_control, in_control)
-                    }
+                    Interpolation::CubicBezier {
+                        out_control,
+                        in_control,
+                    } => cubic_bezier_ease(progress, out_control, in_control),
                 };
                 return Some(left.value + (right.value - left.value) * amount);
             }
@@ -132,9 +149,7 @@ fn cubic_bezier_ease(progress: f64, p1: [f64; 2], p2: [f64; 2]) -> f64 {
 
 fn cubic_component(t: f64, p1: f64, p2: f64) -> f64 {
     let inverse = 1.0 - t;
-    3.0 * inverse * inverse * t * p1
-        + 3.0 * inverse * t * t * p2
-        + t * t * t
+    3.0 * inverse * inverse * t * p1 + 3.0 * inverse * t * t * p2 + t * t * t
 }
 
 #[cfg(test)]
@@ -142,7 +157,11 @@ mod tests {
     use super::*;
 
     fn key(frame: u64, value: f64, interpolation: Interpolation) -> ScalarKeyframe {
-        ScalarKeyframe { frame: Frame(frame), value, interpolation }
+        ScalarKeyframe {
+            frame: Frame(frame),
+            value,
+            interpolation,
+        }
     }
 
     #[test]
@@ -150,7 +169,8 @@ mod tests {
         let curve = ScalarCurve::new(vec![
             key(0, 0.0, Interpolation::Linear),
             key(30, 60.0, Interpolation::Linear),
-        ]).unwrap();
+        ])
+        .unwrap();
         assert_eq!(curve.evaluate(Frame(15)), Some(30.0));
     }
 
@@ -159,7 +179,8 @@ mod tests {
         let curve = ScalarCurve::new(vec![
             key(0, 12.0, Interpolation::Hold),
             key(20, 48.0, Interpolation::Linear),
-        ]).unwrap();
+        ])
+        .unwrap();
         assert_eq!(curve.evaluate(Frame(19)), Some(12.0));
         assert_eq!(curve.evaluate(Frame(20)), Some(48.0));
     }
@@ -169,7 +190,8 @@ mod tests {
         let curve = ScalarCurve::new(vec![
             key(10, 0.0, Interpolation::SmoothStep),
             key(30, 1.0, Interpolation::Linear),
-        ]).unwrap();
+        ])
+        .unwrap();
         assert_eq!(curve.evaluate(Frame(0)), Some(0.0));
         assert_eq!(curve.evaluate(Frame(20)), Some(0.5));
         assert_eq!(curve.evaluate(Frame(40)), Some(1.0));
@@ -178,11 +200,17 @@ mod tests {
     #[test]
     fn cubic_bezier_curve_reaches_exact_endpoints() {
         let curve = ScalarCurve::new(vec![
-            key(0, 0.0, Interpolation::CubicBezier {
-                out_control: [0.2, 0.0], in_control: [0.8, 1.0],
-            }),
+            key(
+                0,
+                0.0,
+                Interpolation::CubicBezier {
+                    out_control: [0.2, 0.0],
+                    in_control: [0.8, 1.0],
+                },
+            ),
             key(60, 100.0, Interpolation::Linear),
-        ]).unwrap();
+        ])
+        .unwrap();
         assert_eq!(curve.evaluate(Frame(0)), Some(0.0));
         assert_eq!(curve.evaluate(Frame(60)), Some(100.0));
         let middle = curve.evaluate(Frame(30)).unwrap();
@@ -199,11 +227,36 @@ mod tests {
     }
 
     #[test]
+    fn animation_curve_serializes_for_portable_project_documents() {
+        let curve = ScalarCurve::new(vec![
+            key(
+                0,
+                0.0,
+                Interpolation::CubicBezier {
+                    out_control: [0.25, 0.1],
+                    in_control: [0.75, 0.9],
+                },
+            ),
+            key(48, 100.0, Interpolation::Linear),
+        ])
+        .unwrap();
+        let json = serde_json::to_string(&curve).unwrap();
+        let reopened: ScalarCurve = serde_json::from_str(&json).unwrap();
+        assert_eq!(reopened, curve);
+        assert_eq!(reopened.evaluate(Frame(24)), curve.evaluate(Frame(24)));
+    }
+
+    #[test]
     fn rejects_non_monotonic_bezier_time_handles() {
         let result = ScalarCurve::new(vec![
-            key(0, 0.0, Interpolation::CubicBezier {
-                out_control: [0.9, 0.0], in_control: [0.2, 1.0],
-            }),
+            key(
+                0,
+                0.0,
+                Interpolation::CubicBezier {
+                    out_control: [0.9, 0.0],
+                    in_control: [0.2, 1.0],
+                },
+            ),
             key(30, 1.0, Interpolation::Linear),
         ]);
         assert_eq!(result, Err(CurveError::InvalidBezierHandles));

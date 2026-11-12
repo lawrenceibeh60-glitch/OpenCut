@@ -1,0 +1,63 @@
+name: KYROCUT X1 Rust Core
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - ".github/workflows/rust-core-ci.yml"
+  push:
+    branches:
+      - main
+      - "feat/kyrocut-x1-*"
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - ".github/workflows/rust-core-ci.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kyrocut-rust-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: Format and core engine tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format Rust workspace
+        run: cargo fmt --all
+
+      - name: Commit formatting fixes when needed
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -u
+            git commit -m "style: apply rustfmt to Rust workspace"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
+
+      - name: Test shared project, render and audio crates
+        run: cargo test -p kyrocut-core -p kyrocut-render -p kyrocut-audio --all-targets
+
+      - name: Lint shared project, render and audio crates
+        run: cargo clippy -p kyrocut-core -p kyrocut-render -p kyrocut-audio --all-targets -- -D warnings
