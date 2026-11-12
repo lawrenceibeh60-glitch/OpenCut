@@ -254,6 +254,37 @@ function Editor() {
   }
   const handleDrop = (event: DragEvent<HTMLDivElement>) => { event.preventDefault(); void addFiles(event.dataTransfer.files) }
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const modifier = event.ctrlKey || event.metaKey
+      if (modifier && event.key.toLowerCase() === 's') {
+        event.preventDefault()
+        saveProject()
+        return
+      }
+      if (modifier && event.key.toLowerCase() === 'o') {
+        event.preventDefault()
+        projectInput.current?.click()
+        return
+      }
+      const target = event.target
+      if (target instanceof HTMLElement && (
+        target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'AUDIO', 'VIDEO'].includes(target.tagName)
+      )) return
+      if (event.code === 'Space') {
+        event.preventDefault()
+        togglePlayback()
+      } else if (event.key === 'Delete' || event.key === 'Backspace') {
+        if (selectedClipId) {
+          event.preventDefault()
+          removeSelectedClip()
+        }
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [saveProject, togglePlayback, removeSelectedClip, selectedClipId])
+
   return (
     <main className="kx-editor">
       <header className="kx-topbar">
