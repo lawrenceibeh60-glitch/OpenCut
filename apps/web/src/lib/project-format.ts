@@ -143,7 +143,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
       const timelineStartFrame = integerValue(clip.timelineStartFrame, 'Clip timeline start')
       const sourceInFrame = integerValue(clip.sourceInFrame, 'Clip source in')
       const durationFrames = integerValue(clip.durationFrames, 'Clip duration', 1)
-      if (source.durationFrames > 0 && sourceInFrame + durationFrames > source.durationFrames) {
+      if (source.durationFrames > 0 && (durationFrames > source.durationFrames || sourceInFrame > source.durationFrames - durationFrames)) {
         throw new Error('Clip source range exceeds media duration: ' + clipId)
       }
       return { id: clipId, mediaId, timelineStartFrame, sourceInFrame, durationFrames }
