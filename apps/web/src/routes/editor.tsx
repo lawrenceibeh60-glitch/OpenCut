@@ -36,6 +36,7 @@ function Editor() {
   const [notice, setNotice] = useState('Import media to begin editing')
   const fileInput = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const audioRef = useRef<HTMLAudioElement>(null)
 
   const allClips = useMemo(() => tracks.flatMap((track) => track.clips.map((clip) => ({ ...clip, trackId: track.id }))), [tracks])
   const selectedClip = allClips.find((clip) => clip.id === selectedClipId) ?? null
@@ -43,12 +44,11 @@ function Editor() {
   const projectDuration = Math.max(30, ...allClips.map((clip) => clip.start + clip.duration))
   const selectedTrack = tracks.find((track) => track.clips.some((clip) => clip.id === selectedClipId))
 
-  useEffect(() => () => assets.forEach((asset) => URL.revokeObjectURL(asset.url)), [assets])
   useEffect(() => {
-    if (videoRef.current && selectedAsset?.kind === 'video' && selectedClip) {
-      videoRef.current.currentTime = selectedClip.sourceIn + Math.max(0, playhead - selectedClip.start)
-    }
-  }, [selectedAsset?.id, selectedClip?.id])
+    const sourceTime = selectedClip ? selectedClip.sourceIn + Math.max(0, playhead - selectedClip.start) : 0
+    if (videoRef.current && selectedAsset?.kind === 'video') videoRef.current.currentTime = sourceTime
+    if (audioRef.current && selectedAsset?.kind === 'audio') audioRef.current.currentTime = sourceTime
+  }, [selectedAsset?.id, selectedClip?.id, playhead])
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
     const accepted = Array.from(files).filter((file) => mediaKind(file))
@@ -115,8 +115,9 @@ function Editor() {
     const project = {
       format: 'kyrocut-project', version: 1, application: 'KYROCUT X1', name: projectName,
       frameRate: { numerator: 30, denominator: 1 }, resolution: { width: 1920, height: 1080 },
-      media: assets.map(({ id, name, kind, size, duration, mimeType }) => ({ id, name, kind, size, duration, mimeType, locator: `media/${name}` })),
-      tracks, playhead,
+      media: assets.map(({ id, name, kind, size, duration, mimeType }) => ({ id, name, kind, size, durationFrames: Math.round(duration * 30), mimeType, locator: `media/${name}` })),
+      tracks: tracks.map((track) => ({ ...track, clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, timelineStartFrame: Math.round(clip.start * 30), sourceInFrame: Math.round(clip.sourceIn * 30), durationFrames: Math.max(1, Math.round(clip.duration * 30)) })) })),
+      playheadFrame: Math.round(playhead * 30),
     }
     const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -132,7 +133,11 @@ function Editor() {
     if (selectedAsset.kind === 'video' && videoRef.current) {
       if (playing) videoRef.current.pause()
       else void videoRef.current.play()
+    } else if (selectedAsset.kind === 'audio' && audioRef.current) {
+      if (playing) audioRef.current.pause()
+      else void audioRef.current.play()
     }
+    if (selectedAsset.kind === 'image') { setNotice('Still image selected. Add it to a composition or move the playhead.'); return }
     setPlaying((value) => !value)
   }
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => { event.preventDefault(); void addFiles(event.dataTransfer.files) }
@@ -181,9 +186,9 @@ function Editor() {
           <div className="kx-preview-panel">
             <div className="kx-panel-title"><span>COMPOSITION VIEWER</span><span>1920 × 1080 <i>·</i> 30 FPS</span></div>
             <div className="kx-preview-stage">
-              {selectedAsset?.kind === 'video' ? <video ref={videoRef} src={selectedAsset.url} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} controls={false} /> :
+              {selectedAsset?.kind === 'video' ? <video ref={videoRef} src={selectedAsset.url} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onTimeUpdate={(event) => { if (selectedClip) setPlayhead(selectedClip.start + event.currentTarget.currentTime - selectedClip.sourceIn) }} controls={false} /> :
                 selectedAsset?.kind === 'image' ? <img src={selectedAsset.url} alt={selectedAsset.name} /> :
-                  selectedAsset?.kind === 'audio' ? <div className="kx-audio-preview"><AudioLines size={54} /><strong>{selectedAsset.name}</strong><span>Audio clip selected</span></div> :
+                  selectedAsset?.kind === 'audio' ? <div className="kx-audio-preview"><AudioLines size={54} /><strong>{selectedAsset.name}</strong><span>Audio source preview</span><audio ref={audioRef} src={selectedAsset.url} controls onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onTimeUpdate={(event) => { if (selectedClip) setPlayhead(selectedClip.start + event.currentTarget.currentTime - selectedClip.sourceIn) }} /></div> :
                     <div className="kx-preview-empty"><div className="kx-preview-logo"><Clapperboard size={32} /></div><strong>KYROCUT X1</strong><span>CREATIVE VIEWPORT</span><small>Select a clip to preview your composition</small></div>}
             </div>
             <div className="kx-transport">
