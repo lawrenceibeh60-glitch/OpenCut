@@ -419,7 +419,7 @@ function Editor() {
                 <button onClick={() => addTrack('video')} title="Add video track"><Plus size={14} /> Video</button>
                 <button onClick={() => addTrack('audio')} title="Add audio track"><Plus size={14} /> Audio</button>
                 <button onClick={() => addTrack('graphics')} title="Add graphics track"><Plus size={14} /> Graphics</button>
-                <button className="kx-icon-button" title="Timeline options" onClick={() => setNotice('Timeline options: frame-accurate editing is enabled at {formatFrameRate(projectFrameRate)}.')}><ChevronDown size={15} /></button>
+                <button className="kx-icon-button" title="Timeline options" onClick={() => setNotice(`Timeline options: frame-accurate editing is enabled at ${formatFrameRate(projectFrameRate)}.`)}><ChevronDown size={15} /></button>
               </div>
             </div>
             <div className="kx-ruler-row"><div className="kx-track-gutter">TRACKS</div><div className="kx-ruler">
