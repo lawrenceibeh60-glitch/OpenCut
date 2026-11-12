@@ -16,6 +16,10 @@ export const Route = createRootRoute({
         content: 'width=device-width, initial-scale=1',
       },
       {
+        name: 'theme-color',
+        content: '#09131D',
+      },
+      {
         title: 'KYROCUT X1 — Creative Production System',
       },
     ],
@@ -24,6 +28,10 @@ export const Route = createRootRoute({
         rel: 'icon',
         href: '/kyrocut-icon.svg',
         type: 'image/svg+xml',
+      },
+      {
+        rel: 'manifest',
+        href: '/manifest.json',
       },
       {
         rel: 'preconnect',
