@@ -201,7 +201,7 @@ function Editor() {
     const candidates = Array.from(files)
     let linked = 0
     for (const asset of missingAssets) {
-      const file = candidates.find((candidate) => candidate.name.toLowerCase() === asset.name.toLowerCase())
+      const file = candidates.find((candidate) => candidate.name.toLowerCase() === asset.name.toLowerCase() && mediaKind(candidate) === asset.kind)
       if (!file) continue
       const url = URL.createObjectURL(file)
       objectUrls.current.push(url)
