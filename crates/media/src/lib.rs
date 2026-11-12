@@ -97,7 +97,7 @@ pub fn probe(path: impl AsRef<Path>) -> Result<MediaInfo, MediaError> {
     let video = input
         .streams()
         .best(ffmpeg::media::Type::Video)
-        .map(|stream| {
+        .and_then(|stream| {
             let stream_index = stream.index();
             let average_frame_rate = format!("{}", stream.avg_frame_rate());
             let decoder = ffmpeg::codec::context::Context::from_parameters(stream.parameters())
@@ -108,13 +108,12 @@ pub fn probe(path: impl AsRef<Path>) -> Result<MediaInfo, MediaError> {
                 height: decoder.height(),
                 average_frame_rate,
             })
-        })
-        .flatten();
+        });
 
     let audio = input
         .streams()
         .best(ffmpeg::media::Type::Audio)
-        .map(|stream| {
+        .and_then(|stream| {
             let stream_index = stream.index();
             let decoder = ffmpeg::codec::context::Context::from_parameters(stream.parameters())
                 .and_then(|context| context.decoder().audio());
@@ -123,8 +122,7 @@ pub fn probe(path: impl AsRef<Path>) -> Result<MediaInfo, MediaError> {
                 sample_rate: decoder.rate(),
                 channels: decoder.channels(),
             })
-        })
-        .flatten();
+        });
 
     Ok(MediaInfo {
         path: path.to_path_buf(),
