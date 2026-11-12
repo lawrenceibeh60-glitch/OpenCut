@@ -6,6 +6,8 @@
 use std::collections::HashSet;
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 mod animation;
 mod commands;
 mod history;
@@ -18,7 +20,7 @@ pub use history::ProjectHistory;
 pub const PROJECT_FORMAT: &str = "kyrocut-project";
 pub const PROJECT_FORMAT_VERSION: u32 = 1;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FrameRate {
     pub numerator: u32,
     pub denominator: u32,
@@ -62,10 +64,12 @@ fn gcd(mut a: u32, mut b: u32) -> u32 {
     a.max(1)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Frame(pub u64);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum TrackKind {
     Video,
     Audio,
@@ -73,21 +77,37 @@ pub enum TrackKind {
     Adjustment,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MediaKind {
+    Video,
+    Audio,
+    Image,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MediaReference {
     pub id: String,
     pub name: String,
+    pub kind: MediaKind,
+    #[serde(rename = "size")]
+    pub size_bytes: u64,
+    pub mime_type: String,
     /// Relative path or application-managed asset identifier; never an absolute
     /// machine-specific path in a portable project file.
     pub locator: String,
     pub duration_frames: Option<u64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Clip {
     pub id: String,
     pub media_id: String,
+    #[serde(rename = "timelineStartFrame")]
     pub timeline_start: Frame,
+    #[serde(rename = "sourceInFrame")]
     pub source_in: Frame,
     pub duration_frames: u64,
     pub enabled: bool,
@@ -113,7 +133,8 @@ impl Clip {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Track {
     pub id: String,
     pub name: String,
@@ -142,6 +163,24 @@ pub struct Project {
 }
 
 impl Project {
+    /// Create a validated, versioned interchange document from this project.
+    pub fn to_document(&self, playhead_frame: Frame) -> Result<ProjectDocument, ProjectError> {
+        self.validate()?;
+        Ok(ProjectDocument {
+            format: PROJECT_FORMAT.to_owned(),
+            version: PROJECT_FORMAT_VERSION,
+            application: "KYROCUT X1".to_owned(),
+            id: self.id.clone(),
+            name: self.name.clone(),
+            frame_rate: self.frame_rate,
+            resolution: Resolution { width: self.width, height: self.height },
+            media: self.media.clone(),
+            tracks: self.tracks.clone(),
+            playhead_frame,
+        })
+    }
+
+
     pub fn new(name: impl Into<String>, width: u32, height: u32, frame_rate: FrameRate) -> Self {
         Self {
             id: "project-1".to_owned(),
@@ -226,6 +265,8 @@ impl Project {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProjectError {
     InvalidFrameRate,
+    UnsupportedProjectFormat,
+    UnsupportedProjectVersion(u32),
     InvalidDimensions,
     EmptyIdentifier,
     EmptyClip,
@@ -239,6 +280,8 @@ impl fmt::Display for ProjectError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidFrameRate => write!(f, "frame rate numerator and denominator must be positive"),
+            Self::UnsupportedProjectFormat => write!(f, "unsupported project format identifier"),
+            Self::UnsupportedProjectVersion(version) => write!(f, "unsupported project format version: {version}"),
             Self::InvalidDimensions => write!(f, "project dimensions must be positive"),
             Self::EmptyIdentifier => write!(f, "project, track, clip, and media identifiers must not be empty"),
             Self::EmptyClip => write!(f, "clip duration must be at least one frame"),
@@ -273,6 +316,9 @@ mod tests {
         project.media.push(MediaReference {
             id: "media-1".into(),
             name: "shot.mp4".into(),
+            kind: MediaKind::Video,
+            size_bytes: 1024,
+            mime_type: "video/mp4".into(),
             locator: "assets/shot.mp4".into(),
             duration_frames: Some(900),
         });
@@ -308,7 +354,7 @@ mod tests {
     #[test]
     fn timeline_evaluator_returns_source_frame_for_active_clip() {
         let mut project = Project::new("Evaluate", 1920, 1080, FrameRate::FPS_30);
-        project.media.push(MediaReference { id: "m".into(), name: "clip.mp4".into(), locator: "media/clip.mp4".into(), duration_frames: Some(500) });
+        project.media.push(MediaReference { id: "m".into(), name: "clip.mp4".into(), kind: MediaKind::Video, size_bytes: 512, mime_type: "video/mp4".into(), locator: "media/clip.mp4".into(), duration_frames: Some(500) });
         project.tracks.push(Track { id: "v1".into(), name: "V1".into(), kind: TrackKind::Video, muted: false, locked: false, clips: vec![Clip { id: "c1".into(), media_id: "m".into(), timeline_start: Frame(100), source_in: Frame(20), duration_frames: 50, enabled: true }] });
         let active = project.active_clips_at(Frame(115));
         assert_eq!(active.len(), 1);
@@ -320,7 +366,7 @@ mod tests {
     #[test]
     fn validation_rejects_source_range_beyond_media_duration() {
         let mut project = Project::new("Bounds", 1920, 1080, FrameRate::FPS_30);
-        project.media.push(MediaReference { id: "m".into(), name: "short.mp4".into(), locator: "media/short.mp4".into(), duration_frames: Some(20) });
+        project.media.push(MediaReference { id: "m".into(), name: "short.mp4".into(), kind: MediaKind::Video, size_bytes: 512, mime_type: "video/mp4".into(), locator: "media/short.mp4".into(), duration_frames: Some(20) });
         project.tracks.push(Track { id: "v1".into(), name: "V1".into(), kind: TrackKind::Video, muted: false, locked: false, clips: vec![Clip { id: "c1".into(), media_id: "m".into(), timeline_start: Frame(0), source_in: Frame(10), duration_frames: 15, enabled: true }] });
         assert_eq!(project.validate(), Err(ProjectError::ClipExceedsMedia("c1".into())));
     }
@@ -328,8 +374,8 @@ mod tests {
     #[test]
     fn validation_rejects_duplicate_media_identifiers() {
         let mut project = Project::new("Duplicates", 1920, 1080, FrameRate::FPS_30);
-        project.media.push(MediaReference { id: "m".into(), name: "one.mp4".into(), locator: "media/one.mp4".into(), duration_frames: None });
-        project.media.push(MediaReference { id: "m".into(), name: "two.mp4".into(), locator: "media/two.mp4".into(), duration_frames: None });
+        project.media.push(MediaReference { id: "m".into(), name: "one.mp4".into(), kind: MediaKind::Video, size_bytes: 512, mime_type: "video/mp4".into(), locator: "media/one.mp4".into(), duration_frames: None });
+        project.media.push(MediaReference { id: "m".into(), name: "two.mp4".into(), kind: MediaKind::Video, size_bytes: 512, mime_type: "video/mp4".into(), locator: "media/two.mp4".into(), duration_frames: None });
         assert_eq!(project.validate(), Err(ProjectError::DuplicateIdentifier("m".into())));
     }
 
