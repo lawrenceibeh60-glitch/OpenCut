@@ -541,4 +541,80 @@ mod tests {
         assert_eq!(rendered.pixel(0, 0), Some([0, 255, 0, 0]));
         assert_eq!(rendered.pixel(1, 0), Some([255, 0, 0, 255]));
     }
+    #[test]
+    fn executes_alpha_blend_node() {
+        let mut base = node("base", NodeOperation::MediaSource, vec![], vec![socket("image", SocketType::Image)]);
+        base.parameters.insert("mediaId".into(), Value::String("base".into()));
+        let mut top = node("top", NodeOperation::MediaSource, vec![], vec![socket("image", SocketType::Image)]);
+        top.parameters.insert("mediaId".into(), Value::String("top".into()));
+        let mut blend = node(
+            "blend",
+            NodeOperation::Blend,
+            vec![socket("base", SocketType::Image), socket("foreground", SocketType::Image)],
+            vec![socket("image", SocketType::Image)],
+        );
+        blend.parameters.insert("opacity".into(), Value::from(0.5));
+        let output = node("output", NodeOperation::Output, vec![socket("image", SocketType::Image)], vec![]);
+        let graph = CompositingGraph {
+            id: "blend-graph".into(),
+            nodes: vec![base, top, blend, output],
+            connections: vec![
+                connect("c1", "base", "image", "blend", "base"),
+                connect("c2", "top", "image", "blend", "foreground"),
+                connect("c3", "blend", "image", "output", "image"),
+            ],
+        };
+        let media = HashMap::from([
+            ("base".into(), RgbaImage::solid(1, 1, [0, 0, 255, 255]).unwrap()),
+            ("top".into(), RgbaImage::solid(1, 1, [255, 0, 0, 255]).unwrap()),
+        ]);
+        let rendered = render_compositing_graph(&graph, &media, 1, 1).unwrap();
+        assert_eq!(rendered.pixel(0, 0), Some([128, 0, 128, 255]));
+    }
+
+    #[test]
+    fn mask_node_controls_blend_opacity() {
+        let mut base = node("base", NodeOperation::MediaSource, vec![], vec![socket("image", SocketType::Image)]);
+        base.parameters.insert("mediaId".into(), Value::String("base".into()));
+        let mut top = node("top", NodeOperation::MediaSource, vec![], vec![socket("image", SocketType::Image)]);
+        top.parameters.insert("mediaId".into(), Value::String("top".into()));
+        let mut matte_source = node("matte-source", NodeOperation::MediaSource, vec![], vec![socket("image", SocketType::Image)]);
+        matte_source.parameters.insert("mediaId".into(), Value::String("matte".into()));
+        let matte = node(
+            "matte",
+            NodeOperation::Mask,
+            vec![socket("image", SocketType::Image)],
+            vec![socket("mask", SocketType::Mask)],
+        );
+        let blend = node(
+            "blend",
+            NodeOperation::Blend,
+            vec![
+                socket("base", SocketType::Image),
+                socket("foreground", SocketType::Image),
+                socket("mask", SocketType::Mask),
+            ],
+            vec![socket("image", SocketType::Image)],
+        );
+        let output = node("output", NodeOperation::Output, vec![socket("image", SocketType::Image)], vec![]);
+        let graph = CompositingGraph {
+            id: "masked-blend".into(),
+            nodes: vec![base, top, matte_source, matte, blend, output],
+            connections: vec![
+                connect("c1", "base", "image", "blend", "base"),
+                connect("c2", "top", "image", "blend", "foreground"),
+                connect("c3", "matte-source", "image", "matte", "image"),
+                connect("c4", "matte", "mask", "blend", "mask"),
+                connect("c5", "blend", "image", "output", "image"),
+            ],
+        };
+        let media = HashMap::from([
+            ("base".into(), RgbaImage::solid(1, 1, [0, 0, 255, 255]).unwrap()),
+            ("top".into(), RgbaImage::solid(1, 1, [255, 0, 0, 255]).unwrap()),
+            ("matte".into(), RgbaImage::solid(1, 1, [0, 0, 0, 255]).unwrap()),
+        ]);
+        let rendered = render_compositing_graph(&graph, &media, 1, 1).unwrap();
+        assert_eq!(rendered.pixel(0, 0), Some([0, 0, 255, 255]));
+    }
+
 }
