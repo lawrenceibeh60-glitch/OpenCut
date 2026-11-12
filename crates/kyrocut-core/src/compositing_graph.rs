@@ -4,7 +4,7 @@
 //! pixel execution. Desktop and web clients can share the same graph document;
 //! render backends consume its validated topological execution order.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
@@ -46,6 +46,9 @@ pub struct GraphNode {
     pub id: String,
     pub label: String,
     pub operation: NodeOperation,
+    /// Operation-specific values. The core stores portable data; render backends validate and interpret it.
+    #[serde(default)]
+    pub parameters: BTreeMap<String, serde_json::Value>,
     #[serde(default)]
     pub inputs: Vec<GraphSocket>,
     #[serde(default)]
@@ -314,6 +317,7 @@ mod tests {
             id: id.into(),
             label: id.into(),
             operation,
+            parameters: BTreeMap::new(),
             inputs,
             outputs,
         }
