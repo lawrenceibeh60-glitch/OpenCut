@@ -42,6 +42,7 @@ function Editor() {
   const [projectFrameRate, setProjectFrameRate] = useState<RationalFrameRate>(SEQUENCE_FRAME_RATE)
   const [projectResolution, setProjectResolution] = useState({ width: 1920, height: 1080 })
   const [notice, setNotice] = useState('Import media to begin editing')
+  const [recoveryReady, setRecoveryReady] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const projectInput = useRef<HTMLInputElement>(null)
   const relinkInput = useRef<HTMLInputElement>(null)
@@ -50,12 +51,78 @@ function Editor() {
   const objectUrls = useRef<string[]>([])
   useEffect(() => () => objectUrls.current.forEach((url) => URL.revokeObjectURL(url)), [])
 
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('kyrocut-x1:recovery')
+      if (saved) {
+        const manifest = parseProjectManifest(saved)
+        if (manifest.format === 'kyrocut-project' && manifest.version === 1 && Array.isArray(manifest.media) && Array.isArray(manifest.tracks)) {
+          const frameRate = manifest.frameRate?.numerator && manifest.frameRate?.denominator ? manifest.frameRate : SEQUENCE_FRAME_RATE
+          setProjectFrameRate(frameRate)
+          setProjectResolution(manifest.resolution)
+          setAssets(manifest.media.map((asset) => ({
+            id: asset.id, name: asset.name, kind: asset.kind, url: '',
+            size: asset.size ?? 0, duration: framesToSeconds(asset.durationFrames ?? 0, frameRate),
+            durationKnown: asset.durationFrames !== null, mimeType: asset.mimeType ?? '', missing: true,
+          })))
+          setTracks(manifest.tracks.map((track) => ({
+            id: track.id, name: track.name, kind: track.kind,
+            muted: Boolean(track.muted), locked: Boolean(track.locked),
+            clips: track.clips.map((clip) => ({
+              id: clip.id, mediaId: clip.mediaId,
+              start: framesToSeconds(clip.timelineStartFrame, frameRate),
+              sourceIn: framesToSeconds(clip.sourceInFrame, frameRate),
+              duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled,
+            })),
+          })))
+          setProjectId(manifest.id ?? createId())
+          setProjectName(manifest.name || 'Recovered project')
+          setPlayhead(framesToSeconds(manifest.playheadFrame ?? 0, frameRate))
+          setNotice('Recovered the latest local project snapshot. Relink source media to preview.')
+        }
+      }
+    } catch {
+      setNotice('Local recovery snapshot could not be read; starting a fresh project.')
+    } finally {
+      setRecoveryReady(true)
+    }
+  }, [])
+
   const allClips = useMemo(() => tracks.flatMap((track) => track.clips.map((clip) => ({ ...clip, trackId: track.id }))), [tracks])
   const selectedClip = allClips.find((clip) => clip.id === selectedClipId) ?? null
   const selectedAsset = assets.find((asset) => asset.id === selectedClip?.mediaId) ?? null
   const projectDuration = Math.max(30, ...allClips.filter((clip) => clip.enabled).map((clip) => clip.start + clip.duration))
   const selectedTrack = tracks.find((track) => track.clips.some((clip) => clip.id === selectedClipId))
   const missingAssets = assets.filter((asset) => !asset.url)
+
+  const projectDocument = useMemo(() => ({
+    format: 'kyrocut-project', version: 1, application: 'KYROCUT X1',
+    id: projectId, name: projectName, frameRate: projectFrameRate, resolution: projectResolution,
+    media: assets.map(({ id, name, kind, size, duration, durationKnown, mimeType }) => ({
+      id, name, kind, size, durationFrames: durationKnown ? secondsToFrames(duration, projectFrameRate) : null,
+      mimeType, locator: `media/${name}`,
+    })),
+    tracks: tracks.map((track) => ({
+      ...track,
+      clips: track.clips.map((clip) => ({
+        id: clip.id, mediaId: clip.mediaId,
+        timelineStartFrame: secondsToFrames(clip.start, projectFrameRate),
+        sourceInFrame: secondsToFrames(clip.sourceIn, projectFrameRate),
+        durationFrames: Math.max(1, secondsToFrames(clip.duration, projectFrameRate)),
+        enabled: clip.enabled,
+      })),
+    })),
+    playheadFrame: secondsToFrames(playhead, projectFrameRate),
+  }), [assets, playhead, projectFrameRate, projectId, projectName, projectResolution, tracks])
+
+  useEffect(() => {
+    if (!recoveryReady) return
+    try {
+      localStorage.setItem('kyrocut-x1:recovery', JSON.stringify(projectDocument))
+    } catch {
+      setNotice('Automatic recovery storage is full or unavailable. Save a .kcx1 project file manually.')
+    }
+  }, [projectDocument, recoveryReady])
 
   useEffect(() => {
     const sourceTime = selectedClip ? selectedClip.sourceIn + Math.max(0, playhead - selectedClip.start) : 0
@@ -188,14 +255,7 @@ function Editor() {
     setTracks((current) => [...current, { id: createId(), name: `${prefix}${number}`, kind, clips: [], muted: false, locked: false }])
   }
   const saveProject = () => {
-    const project = {
-      format: 'kyrocut-project', version: 1, application: 'KYROCUT X1', id: projectId, name: projectName,
-      frameRate: projectFrameRate, resolution: projectResolution,
-      media: assets.map(({ id, name, kind, size, duration, durationKnown, mimeType }) => ({ id, name, kind, size, durationFrames: durationKnown ? secondsToFrames(duration, projectFrameRate) : null, mimeType, locator: `media/${name}` })),
-      tracks: tracks.map((track) => ({ ...track, clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, timelineStartFrame: secondsToFrames(clip.start, projectFrameRate), sourceInFrame: secondsToFrames(clip.sourceIn, projectFrameRate), durationFrames: Math.max(1, secondsToFrames(clip.duration, projectFrameRate)), enabled: clip.enabled })) })),
-      playheadFrame: secondsToFrames(playhead, projectFrameRate),
-    }
-    const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' })
+    const blob = new Blob([JSON.stringify(projectDocument, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
