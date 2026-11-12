@@ -6,6 +6,7 @@ import {
   Upload, Video, Volume2, WandSparkles,
 } from 'lucide-react'
 import './editor.css'
+import './editor-extra.css'
 
 export const Route = createFileRoute('/editor')({ component: Editor })
 
