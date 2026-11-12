@@ -195,13 +195,35 @@ mod tests {
 
     #[test]
     fn multiply_blend_mode_combines_source_and_destination() {
-        let background = RgbaImage::solid(1, 1, [255, 255, 255, 255]).unwrap();
-        let foreground = RgbaImage::solid(1, 1, [80, 120, 200, 255]).unwrap();
+        let background = RgbaImage::solid(1, 1, [128, 128, 128, 255]).unwrap();
+        let foreground = RgbaImage::solid(1, 1, [128, 64, 255, 255]).unwrap();
         let result = composite(1, 1, &[
             CompositeLayer { image: &background, opacity: 1.0, blend_mode: BlendMode::Normal },
             CompositeLayer { image: &foreground, opacity: 1.0, blend_mode: BlendMode::Multiply },
         ]).unwrap();
-        assert_eq!(result.pixel(0, 0), Some([80, 120, 200, 255]));
+        assert_eq!(result.pixel(0, 0), Some([64, 32, 128, 255]));
+    }
+
+    #[test]
+    fn screen_blend_mode_lightens_destination() {
+        let background = RgbaImage::solid(1, 1, [64, 64, 64, 255]).unwrap();
+        let foreground = RgbaImage::solid(1, 1, [128, 128, 128, 255]).unwrap();
+        let result = composite(1, 1, &[
+            CompositeLayer { image: &background, opacity: 1.0, blend_mode: BlendMode::Normal },
+            CompositeLayer { image: &foreground, opacity: 1.0, blend_mode: BlendMode::Screen },
+        ]).unwrap();
+        assert_eq!(result.pixel(0, 0), Some([160, 160, 160, 255]));
+    }
+
+    #[test]
+    fn additive_blend_mode_saturates_channels() {
+        let background = RgbaImage::solid(1, 1, [200, 100, 10, 255]).unwrap();
+        let foreground = RgbaImage::solid(1, 1, [100, 180, 20, 255]).unwrap();
+        let result = composite(1, 1, &[
+            CompositeLayer { image: &background, opacity: 1.0, blend_mode: BlendMode::Normal },
+            CompositeLayer { image: &foreground, opacity: 1.0, blend_mode: BlendMode::Add },
+        ]).unwrap();
+        assert_eq!(result.pixel(0, 0), Some([255, 255, 30, 255]));
     }
 
     #[test]
