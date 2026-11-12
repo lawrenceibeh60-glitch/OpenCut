@@ -3,6 +3,7 @@
 //! Time is represented as integer frames at a rational frame rate. This avoids
 //! floating-point drift when editing, seeking, saving, and rendering projects.
 
+use std::collections::HashSet;
 use std::fmt;
 
 mod commands;
@@ -158,14 +159,35 @@ impl Project {
             return Err(ProjectError::InvalidDimensions);
         }
         FrameRate::new(self.frame_rate.numerator, self.frame_rate.denominator)?;
+
+        let mut media_ids = HashSet::new();
+        for media in &self.media {
+            if media.id.trim().is_empty() || media.name.trim().is_empty() || media.locator.trim().is_empty() {
+                return Err(ProjectError::EmptyIdentifier);
+            }
+            if !media_ids.insert(media.id.as_str()) {
+                return Err(ProjectError::DuplicateIdentifier(media.id.clone()));
+            }
+        }
+
+        let mut track_ids = HashSet::new();
+        let mut clip_ids = HashSet::new();
         for track in &self.tracks {
             if track.id.trim().is_empty() || track.name.trim().is_empty() {
                 return Err(ProjectError::EmptyIdentifier);
             }
+            if !track_ids.insert(track.id.as_str()) {
+                return Err(ProjectError::DuplicateIdentifier(track.id.clone()));
+            }
             for clip in &track.clips {
                 clip.validate()?;
-                if !self.media.iter().any(|media| media.id == clip.media_id) {
-                    return Err(ProjectError::UnknownMedia(clip.media_id.clone()));
+                if !clip_ids.insert(clip.id.as_str()) {
+                    return Err(ProjectError::DuplicateIdentifier(clip.id.clone()));
+                }
+                let media = self.media.iter().find(|media| media.id == clip.media_id)
+                    .ok_or_else(|| ProjectError::UnknownMedia(clip.media_id.clone()))?;
+                if media.duration_frames.is_some_and(|duration| clip.source_out().0 > duration) {
+                    return Err(ProjectError::ClipExceedsMedia(clip.id.clone()));
                 }
             }
         }
@@ -182,7 +204,7 @@ impl Project {
                 active.then_some(ActiveClip {
                     track_id: &track.id,
                     clip,
-                    source_frame: Frame(clip.source_in.0 + position.0 - clip.timeline_start.0),
+                    source_frame: Frame(clip.source_in.0.saturating_add(position.0 - clip.timeline_start.0)),
                 })
             })
         }).collect()
@@ -206,6 +228,8 @@ pub enum ProjectError {
     EmptyClip,
     UnknownMedia(String),
     UnknownClip(String),
+    ClipExceedsMedia(String),
+    DuplicateIdentifier(String),
 }
 
 impl fmt::Display for ProjectError {
@@ -217,6 +241,8 @@ impl fmt::Display for ProjectError {
             Self::EmptyClip => write!(f, "clip duration must be at least one frame"),
             Self::UnknownMedia(id) => write!(f, "clip references unknown media: {id}"),
             Self::UnknownClip(id) => write!(f, "unknown clip: {id}"),
+            Self::ClipExceedsMedia(id) => write!(f, "clip source range exceeds media duration: {id}"),
+            Self::DuplicateIdentifier(id) => write!(f, "duplicate project identifier: {id}"),
         }
     }
 }
@@ -286,6 +312,22 @@ mod tests {
         assert_eq!(active[0].track_id, "v1");
         assert_eq!(active[0].source_frame, Frame(35));
         assert!(project.active_clips_at(Frame(150)).is_empty());
+    }
+
+    #[test]
+    fn validation_rejects_source_range_beyond_media_duration() {
+        let mut project = Project::new("Bounds", 1920, 1080, FrameRate::FPS_30);
+        project.media.push(MediaReference { id: "m".into(), name: "short.mp4".into(), locator: "media/short.mp4".into(), duration_frames: Some(20) });
+        project.tracks.push(Track { id: "v1".into(), name: "V1".into(), kind: TrackKind::Video, muted: false, locked: false, clips: vec![Clip { id: "c1".into(), media_id: "m".into(), timeline_start: Frame(0), source_in: Frame(10), duration_frames: 15, enabled: true }] });
+        assert_eq!(project.validate(), Err(ProjectError::ClipExceedsMedia("c1".into())));
+    }
+
+    #[test]
+    fn validation_rejects_duplicate_media_identifiers() {
+        let mut project = Project::new("Duplicates", 1920, 1080, FrameRate::FPS_30);
+        project.media.push(MediaReference { id: "m".into(), name: "one.mp4".into(), locator: "media/one.mp4".into(), duration_frames: None });
+        project.media.push(MediaReference { id: "m".into(), name: "two.mp4".into(), locator: "media/two.mp4".into(), duration_frames: None });
+        assert_eq!(project.validate(), Err(ProjectError::DuplicateIdentifier("m".into())));
     }
 
     #[test]
