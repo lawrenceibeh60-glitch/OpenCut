@@ -5,6 +5,12 @@
 
 use std::fmt;
 
+mod commands;
+mod history;
+
+pub use commands::EditCommand;
+pub use history::ProjectHistory;
+
 pub const PROJECT_FORMAT: &str = "kyrocut-project";
 pub const PROJECT_FORMAT_VERSION: u32 = 1;
 
@@ -176,6 +182,7 @@ pub enum ProjectError {
     EmptyIdentifier,
     EmptyClip,
     UnknownMedia(String),
+    UnknownClip(String),
 }
 
 impl fmt::Display for ProjectError {
@@ -186,6 +193,7 @@ impl fmt::Display for ProjectError {
             Self::EmptyIdentifier => write!(f, "project, track, clip, and media identifiers must not be empty"),
             Self::EmptyClip => write!(f, "clip duration must be at least one frame"),
             Self::UnknownMedia(id) => write!(f, "clip references unknown media: {id}"),
+            Self::UnknownClip(id) => write!(f, "unknown clip: {id}"),
         }
     }
 }
