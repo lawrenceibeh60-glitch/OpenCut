@@ -344,7 +344,7 @@ function Editor() {
             <div className="kx-transport">
               <button className="kx-icon-button" title="Play or pause" onClick={togglePlayback}>{playing ? <Pause size={17} /> : <Play size={17} />}</button>
               <span className="kx-timecode">{formatTime(playhead, projectFrameRate)}</span>
-              <input aria-label="Timeline playhead" type="range" min="0" max={projectDuration} step="0.01" value={Math.min(playhead, projectDuration)} onChange={(event) => setPlayhead(Number(event.target.value))} />
+              <input aria-label="Timeline playhead" type="range" min="0" max={projectDuration} step={framesToSeconds(1, projectFrameRate)} value={Math.min(playhead, projectDuration)} onChange={(event) => setPlayhead(Number(event.target.value))} />
               <span className="kx-timecode">{formatTime(projectDuration, projectFrameRate)}</span>
               <button className="kx-icon-button" title="Viewer settings" onClick={() => setNotice('Viewer settings are reserved for playback quality and display controls.')}><Settings2 size={16} /></button>
             </div>
@@ -390,9 +390,9 @@ function Editor() {
           {selectedClip && selectedAsset ? <div className="kx-inspector-content">
             <div className="kx-inspector-file"><span className={`kx-asset-icon ${selectedAsset.kind}`}>{selectedAsset.kind === 'video' ? <Film size={17} /> : selectedAsset.kind === 'audio' ? <Music2 size={17} /> : <ImagePlus size={17} />}</span><div><strong>{selectedAsset.name}</strong><small>{selectedAsset.kind.toUpperCase()} SOURCE</small></div></div>
             <div className="kx-section-label">TRANSFORM / TIMING</div>
-            <label className="kx-field"><span>Timeline start (s)</span><input type="number" min="0" step="0.01" value={selectedClip.start.toFixed(2)} onChange={(event) => updateSelectedClip({ start: Number(event.target.value) })} /></label>
-            <label className="kx-field"><span>Source in (s)</span><input type="number" min="0" step="0.01" value={selectedClip.sourceIn.toFixed(2)} onChange={(event) => updateSelectedClip({ sourceIn: Number(event.target.value) })} /></label>
-            <label className="kx-field"><span>Duration (s)</span><input type="number" min="0.03" step="0.01" value={selectedClip.duration.toFixed(2)} onChange={(event) => updateSelectedClip({ duration: Number(event.target.value) })} /></label>
+            <label className="kx-field"><span>Timeline start (s)</span><input type="number" min="0" step={framesToSeconds(1, projectFrameRate)} value={selectedClip.start.toFixed(2)} onChange={(event) => updateSelectedClip({ start: Number(event.target.value) })} /></label>
+            <label className="kx-field"><span>Source in (s)</span><input type="number" min="0" step={framesToSeconds(1, projectFrameRate)} value={selectedClip.sourceIn.toFixed(2)} onChange={(event) => updateSelectedClip({ sourceIn: Number(event.target.value) })} /></label>
+            <label className="kx-field"><span>Duration (s)</span><input type="number" min="0.03" step={framesToSeconds(1, projectFrameRate)} value={selectedClip.duration.toFixed(2)} onChange={(event) => updateSelectedClip({ duration: Number(event.target.value) })} /></label>
               <label className="kx-field"><span>Clip enabled</span><input type="checkbox" checked={selectedClip.enabled} onChange={(event) => updateSelectedClip({ enabled: event.target.checked })} /></label>
             <div className="kx-trim-actions"><button onClick={splitSelectedClip}><Scissors size={13} /> Split</button><button onClick={() => updateSelectedClip({ sourceIn: selectedClip.sourceIn + 0.5, duration: selectedClip.duration - 0.5 })}><Minus size={13} /> Trim start</button><button onClick={() => updateSelectedClip({ duration: selectedClip.duration - 0.5 })}><Minus size={13} /> Trim end</button></div>
             <button className="kx-delete-clip" onClick={removeSelectedClip}><Trash2 size={14} /> Remove clip</button>
