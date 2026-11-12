@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use kyrocut_core::{CompositingGraph, GraphError, GraphNode, NodeOperation};
+use kyrocut_core::{CompositingGraph, Frame, GraphError, GraphNode, NodeOperation, ScalarCurve};
 use serde_json::Value;
 
 use crate::{
@@ -25,6 +25,7 @@ pub enum GraphRenderError {
     MissingOutput,
     ValueTypeMismatch { node_id: String, socket_id: String },
     ImageDimensionsMismatch,
+    InvalidAnimation { node_id: String, property: String, message: String },
     Render(RenderError),
 }
 
@@ -58,6 +59,7 @@ impl fmt::Display for GraphRenderError {
                     "blend inputs and optional mask must have matching dimensions"
                 )
             }
+            Self::InvalidAnimation { node_id, property, message } => write!(f, "node {node_id} has invalid animation for {property}: {message}"),
             Self::Render(error) => write!(f, "render operation failed: {error}"),
         }
     }
@@ -75,6 +77,45 @@ impl From<RenderError> for GraphRenderError {
 enum GraphValue {
     Image(RgbaImage),
     Mask(RgbaImage),
+}
+
+/// Evaluate a graph after applying its serialized scalar curves at an exact project frame.
+pub fn render_compositing_graph_at_frame(
+    graph: &CompositingGraph,
+    media_sources: &HashMap<String, RgbaImage>,
+    width: u32,
+    height: u32,
+    frame: u64,
+) -> Result<RgbaImage, GraphRenderError> {
+    let mut evaluated = graph.clone();
+    for node in &mut evaluated.nodes {
+        let Some(animation) = node.parameters.get("animation").cloned() else {
+            continue;
+        };
+        let curves = animation.as_object().ok_or_else(|| GraphRenderError::InvalidAnimation {
+            node_id: node.id.clone(),
+            property: "animation".into(),
+            message: "expected an object keyed by animated property".into(),
+        })?;
+        for (property, curve_value) in curves {
+            let curve: ScalarCurve = serde_json::from_value(curve_value.clone()).map_err(|error| {
+                GraphRenderError::InvalidAnimation {
+                    node_id: node.id.clone(),
+                    property: property.clone(),
+                    message: error.to_string(),
+                }
+            })?;
+            curve.validate().map_err(|error| GraphRenderError::InvalidAnimation {
+                node_id: node.id.clone(),
+                property: property.clone(),
+                message: error.to_string(),
+            })?;
+            if let Some(value) = curve.evaluate(Frame(frame)) {
+                node.parameters.insert(property.clone(), Value::from(value));
+            }
+        }
+    }
+    render_compositing_graph(&evaluated, media_sources, width, height)
 }
 
 /// Evaluate a validated compositing graph using CPU RGBA8 operations.
@@ -468,6 +509,56 @@ mod tests {
         )]);
         let rendered = render_compositing_graph(&graph, &media, 1, 1).unwrap();
         assert_eq!(rendered.pixel(0, 0), Some([80, 100, 120, 200]));
+    }
+
+    #[test]
+    fn evaluates_scalar_curves_at_the_requested_project_frame() {
+        let mut source = node(
+            "source",
+            NodeOperation::MediaSource,
+            vec![],
+            vec![socket("image", SocketType::Image)],
+        );
+        source.parameters.insert("mediaId".into(), Value::String("shot".into()));
+        let mut grade = node(
+            "grade",
+            NodeOperation::ColorGrade,
+            vec![socket("image", SocketType::Image)],
+            vec![socket("image", SocketType::Image)],
+        );
+        grade.parameters.insert(
+            "animation".into(),
+            serde_json::json!({
+                "exposureStops": {
+                    "keyframes": [
+                        { "frame": 0, "value": 0.0, "interpolation": "linear" },
+                        { "frame": 10, "value": 1.0, "interpolation": "linear" }
+                    ]
+                }
+            }),
+        );
+        let output = node(
+            "output",
+            NodeOperation::Output,
+            vec![socket("image", SocketType::Image)],
+            vec![],
+        );
+        let graph = CompositingGraph {
+            id: "animated-grade".into(),
+            nodes: vec![source, grade, output],
+            connections: vec![
+                connect("c1", "source", "image", "grade", "image"),
+                connect("c2", "grade", "image", "output", "image"),
+            ],
+        };
+        let media = HashMap::from([(
+            "shot".into(),
+            RgbaImage::solid(1, 1, [40, 50, 60, 255]).unwrap(),
+        )]);
+        let before = render_compositing_graph_at_frame(&graph, &media, 1, 1, 0).unwrap();
+        let after = render_compositing_graph_at_frame(&graph, &media, 1, 1, 10).unwrap();
+        assert_eq!(before.pixel(0, 0), Some([40, 50, 60, 255]));
+        assert_eq!(after.pixel(0, 0), Some([80, 100, 120, 255]));
     }
 
     #[test]
