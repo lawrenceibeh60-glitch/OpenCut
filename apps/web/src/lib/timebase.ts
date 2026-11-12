@@ -19,7 +19,11 @@ export function secondsToFrames(seconds: number, rate: RationalFrameRate = SEQUE
   if (!Number.isFinite(seconds) || seconds < 0) {
     throw new RangeError('Time must be a finite, non-negative number of seconds')
   }
-  return Math.round(seconds * rate.numerator / rate.denominator)
+  const frames = Math.round(seconds * rate.numerator / rate.denominator)
+  if (!Number.isSafeInteger(frames)) {
+    throw new RangeError('Frame position exceeds the safe integer range')
+  }
+  return frames
 }
 
 export function framesToSeconds(frames: number, rate: RationalFrameRate = SEQUENCE_FRAME_RATE): number {
