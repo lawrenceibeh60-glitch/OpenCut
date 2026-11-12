@@ -1,0 +1,50 @@
+name: KYROCUT X1 Rust Core
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - ".github/workflows/rust-core-ci.yml"
+  push:
+    branches:
+      - main
+      - "feat/kyrocut-x1-*"
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - ".github/workflows/rust-core-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kyrocut-rust-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: Format and core engine tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Test shared project, render and audio crates
+        run: cargo test -p kyrocut-core -p kyrocut-render -p kyrocut-audio --all-targets
+
+      - name: Lint shared project, render and audio crates
+        run: cargo clippy -p kyrocut-core -p kyrocut-render -p kyrocut-audio --all-targets -- -D warnings
