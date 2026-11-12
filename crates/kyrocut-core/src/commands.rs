@@ -59,8 +59,8 @@ mod tests {
     fn project_with_clip() -> Project {
         let mut project = Project::new("Edit test", 1920, 1080, FrameRate::FPS_30);
         project.media.push(MediaReference {
-            id: "media-1".into(), name: "source.mp4".into(),
-            locator: "media/source.mp4".into(), duration_frames: Some(900),
+            id: "media-1".into(), name: "source.mp4".into(), kind: crate::MediaKind::Video,
+            size_bytes: 1024, mime_type: "video/mp4".into(), locator: "media/source.mp4".into(), duration_frames: Some(900),
         });
         project.tracks.push(Track {
             id: "track-1".into(), name: "V1".into(), kind: TrackKind::Video,
