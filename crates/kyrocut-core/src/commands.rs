@@ -43,12 +43,15 @@ impl Project {
                 self.find_clip_mut(&clip_id)?.enabled = enabled;
             }
             EditCommand::InsertClip { track_id, clip } => {
-                self.find_track_mut(&track_id)?.clips.push(clip);
+                let track = self.find_track_mut(&track_id)?;
+                if track.locked { return Err(ProjectError::TrackLocked(track_id)); }
+                track.clips.push(clip);
             }
             EditCommand::RemoveClip { clip_id } => {
                 let track = self.tracks.iter_mut()
                     .find(|track| track.clips.iter().any(|clip| clip.id == clip_id))
                     .ok_or_else(|| ProjectError::UnknownClip(clip_id.clone()))?;
+                if track.locked { return Err(ProjectError::TrackLocked(track.id.clone())); }
                 let index = track.clips.iter().position(|clip| clip.id == clip_id)
                     .ok_or_else(|| ProjectError::UnknownClip(clip_id.clone()))?;
                 track.clips.remove(index);
@@ -57,6 +60,7 @@ impl Project {
             EditCommand::RemoveTrack { track_id } => {
                 let index = self.tracks.iter().position(|track| track.id == track_id)
                     .ok_or_else(|| ProjectError::UnknownTrack(track_id.clone()))?;
+                if self.tracks[index].locked { return Err(ProjectError::TrackLocked(track_id)); }
                 self.tracks.remove(index);
             }
             EditCommand::SetTrackMuted { track_id, muted } => {
@@ -76,8 +80,11 @@ impl Project {
     }
 
     fn find_clip_mut(&mut self, clip_id: &str) -> Result<&mut Clip, ProjectError> {
-        self.tracks.iter_mut()
-            .find_map(|track| track.clips.iter_mut().find(|clip| clip.id == clip_id))
+        let track = self.tracks.iter_mut()
+            .find(|track| track.clips.iter().any(|clip| clip.id == clip_id))
+            .ok_or_else(|| ProjectError::UnknownClip(clip_id.to_owned()))?;
+        if track.locked { return Err(ProjectError::TrackLocked(track.id.clone())); }
+        track.clips.iter_mut().find(|clip| clip.id == clip_id)
             .ok_or_else(|| ProjectError::UnknownClip(clip_id.to_owned()))
     }
 
@@ -110,6 +117,39 @@ mod tests {
             }],
         });
         project
+    }
+
+    #[test]
+    fn locked_track_rejects_clip_edits_and_preserves_project() {
+        let mut project = project_with_clip();
+        project.tracks[0].locked = true;
+        let before = project.clone();
+        assert_eq!(
+            project.apply_edit(EditCommand::MoveClip {
+                clip_id: "clip-1".into(), timeline_start: Frame(45),
+            }),
+            Err(ProjectError::TrackLocked("track-1".into()))
+        );
+        assert_eq!(project, before);
+    }
+
+    #[test]
+    fn locked_track_rejects_clip_insertion_and_track_removal() {
+        let mut project = project_with_clip();
+        project.tracks[0].locked = true;
+        let clip = Clip {
+            id: "clip-2".into(), media_id: "media-1".into(),
+            timeline_start: Frame(120), source_in: Frame(120),
+            duration_frames: 60, enabled: true,
+        };
+        assert_eq!(
+            project.apply_edit(EditCommand::InsertClip { track_id: "track-1".into(), clip }),
+            Err(ProjectError::TrackLocked("track-1".into()))
+        );
+        assert_eq!(
+            project.apply_edit(EditCommand::RemoveTrack { track_id: "track-1".into() }),
+            Err(ProjectError::TrackLocked("track-1".into()))
+        );
     }
 
     #[test]
