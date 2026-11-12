@@ -6,6 +6,10 @@
 
 use std::fmt;
 
+mod graph;
+
+pub use graph::{render_compositing_graph, GraphRenderError};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlendMode {
     Normal,
