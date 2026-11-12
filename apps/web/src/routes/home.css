@@ -11,7 +11,7 @@
 .kx-hero-copy { max-width: 550px; }
 .kx-eyebrow { display: flex; align-items: center; gap: 9px; margin-bottom: 25px; color: #6f91a5; font: 10px 'IBM Plex Mono', monospace; letter-spacing: .16em; }
 .kx-eyebrow i { width: 7px; height: 7px; background: #53d8e7; box-shadow: 0 0 13px #53d8e788; }
-.kx-hero h1 { margin: 0; color: #edf4fa; font-size: clamp(42px, 5.2vw, 70px); font-weight: 600; line-height: 1.02; letter-spacing: -.055em; }
+.kx-hero h1 { font-family: 'Inter', sans-serif; margin: 0; color: #edf4fa; font-size: clamp(42px, 5.2vw, 70px); font-weight: 600; line-height: 1.02; letter-spacing: -.055em; }
 .kx-hero h1 em { color: #55d5e4; font-style: normal; }
 .kx-hero-copy > p { max-width: 460px; margin: 25px 0 30px; color: #8da0b1; font-size: 14px; line-height: 1.8; }
 .kx-hero-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 13px; }
