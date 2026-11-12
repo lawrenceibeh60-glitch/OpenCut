@@ -38,7 +38,10 @@ impl fmt::Display for AudioError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidFormat => write!(f, "sample rate and channel count must be positive"),
-            Self::InvalidSampleCount => write!(f, "interleaved sample count must be divisible by channel count"),
+            Self::InvalidSampleCount => write!(
+                f,
+                "interleaved sample count must be divisible by channel count"
+            ),
             Self::NonFiniteSample => write!(f, "PCM samples must be finite floating-point values"),
             Self::InvalidGain => write!(f, "gain must be finite and within the supported range"),
             Self::InvalidPan => write!(f, "stereo pan must be between -1 and 1"),
@@ -61,14 +64,20 @@ impl PcmBuffer {
         if samples.iter().any(|sample| !sample.is_finite()) {
             return Err(AudioError::NonFiniteSample);
         }
-        Ok(Self { sample_rate, channels, samples })
+        Ok(Self {
+            sample_rate,
+            channels,
+            samples,
+        })
     }
 
     pub fn silence(sample_rate: u32, channels: u16, frames: usize) -> Result<Self, AudioError> {
         if sample_rate == 0 || channels == 0 {
             return Err(AudioError::InvalidFormat);
         }
-        let sample_count = frames.checked_mul(channels as usize).ok_or(AudioError::InvalidSampleCount)?;
+        let sample_count = frames
+            .checked_mul(channels as usize)
+            .ok_or(AudioError::InvalidSampleCount)?;
         Self::new(sample_rate, channels, vec![0.0; sample_count])
     }
 
@@ -93,17 +102,24 @@ impl PcmBuffer {
     }
 
     pub fn peak(&self) -> f32 {
-        self.samples.iter().fold(0.0_f32, |peak, sample| peak.max(sample.abs()))
+        self.samples
+            .iter()
+            .fold(0.0_f32, |peak, sample| peak.max(sample.abs()))
     }
 
     pub fn rms(&self) -> f32 {
         if self.samples.is_empty() {
             return 0.0;
         }
-        let mean_square = self.samples.iter().map(|sample| {
-            let sample = *sample as f64;
-            sample * sample
-        }).sum::<f64>() / self.samples.len() as f64;
+        let mean_square = self
+            .samples
+            .iter()
+            .map(|sample| {
+                let sample = *sample as f64;
+                sample * sample
+            })
+            .sum::<f64>()
+            / self.samples.len() as f64;
         mean_square.sqrt() as f32
     }
 
@@ -127,7 +143,11 @@ impl PcmBuffer {
             return;
         }
         for frame in 0..count {
-            let gain = if count == 1 { 0.0 } else { frame as f32 / (count - 1) as f32 };
+            let gain = if count == 1 {
+                0.0
+            } else {
+                frame as f32 / (count - 1) as f32
+            };
             self.scale_frame(frame, gain);
         }
     }
@@ -139,7 +159,11 @@ impl PcmBuffer {
         }
         let start = self.frame_count() - count;
         for offset in 0..count {
-            let gain = if count == 1 { 0.0 } else { (count - offset - 1) as f32 / (count - 1) as f32 };
+            let gain = if count == 1 {
+                0.0
+            } else {
+                (count - offset - 1) as f32 / (count - 1) as f32
+            };
             self.scale_frame(start + offset, gain);
         }
     }
@@ -184,7 +208,9 @@ impl PcmBuffer {
         if !pan.is_finite() || !(-1.0..=1.0).contains(&pan) {
             return Err(AudioError::InvalidPan);
         }
-        let source_end = source_start_frame.checked_add(source_frame_count).ok_or(AudioError::ClipOutOfBounds)?;
+        let source_end = source_start_frame
+            .checked_add(source_frame_count)
+            .ok_or(AudioError::ClipOutOfBounds)?;
         if source_end > source.frame_count() {
             return Err(AudioError::ClipOutOfBounds);
         }
@@ -258,39 +284,96 @@ mod tests {
     #[test]
     fn timeline_mixer_respects_source_in_and_timeline_start() {
         let source = PcmBuffer::new(48_000, 1, vec![0.1, 0.2, 0.3, 0.4]).unwrap();
-        let output = mix_timeline(48_000, 1, 5, &[AudioClip {
-            source: &source, timeline_start_frame: 1, source_in_frame: 1,
-            duration_frames: 2, gain_db: 0.0, pan: 0.0, enabled: true,
-        }]).unwrap();
+        let output = mix_timeline(
+            48_000,
+            1,
+            5,
+            &[AudioClip {
+                source: &source,
+                timeline_start_frame: 1,
+                source_in_frame: 1,
+                duration_frames: 2,
+                gain_db: 0.0,
+                pan: 0.0,
+                enabled: true,
+            }],
+        )
+        .unwrap();
         assert_eq!(output.samples(), &[0.0, 0.2, 0.3, 0.0, 0.0]);
     }
 
     #[test]
     fn timeline_mixer_sums_overlapping_clips_and_skips_disabled_clips() {
         let source = PcmBuffer::new(48_000, 1, vec![0.25, 0.25]).unwrap();
-        let output = mix_timeline(48_000, 1, 2, &[
-            AudioClip { source: &source, timeline_start_frame: 0, source_in_frame: 0, duration_frames: 2, gain_db: 0.0, pan: 0.0, enabled: true },
-            AudioClip { source: &source, timeline_start_frame: 0, source_in_frame: 0, duration_frames: 2, gain_db: 0.0, pan: 0.0, enabled: true },
-            AudioClip { source: &source, timeline_start_frame: 0, source_in_frame: 0, duration_frames: 2, gain_db: 0.0, pan: 0.0, enabled: false },
-        ]).unwrap();
+        let output = mix_timeline(
+            48_000,
+            1,
+            2,
+            &[
+                AudioClip {
+                    source: &source,
+                    timeline_start_frame: 0,
+                    source_in_frame: 0,
+                    duration_frames: 2,
+                    gain_db: 0.0,
+                    pan: 0.0,
+                    enabled: true,
+                },
+                AudioClip {
+                    source: &source,
+                    timeline_start_frame: 0,
+                    source_in_frame: 0,
+                    duration_frames: 2,
+                    gain_db: 0.0,
+                    pan: 0.0,
+                    enabled: true,
+                },
+                AudioClip {
+                    source: &source,
+                    timeline_start_frame: 0,
+                    source_in_frame: 0,
+                    duration_frames: 2,
+                    gain_db: 0.0,
+                    pan: 0.0,
+                    enabled: false,
+                },
+            ],
+        )
+        .unwrap();
         assert_eq!(output.samples(), &[0.5, 0.5]);
     }
 
     #[test]
     fn timeline_mixer_rejects_clip_source_overrun() {
         let source = PcmBuffer::new(48_000, 1, vec![0.1, 0.2]).unwrap();
-        let result = mix_timeline(48_000, 1, 2, &[AudioClip {
-            source: &source, timeline_start_frame: 0, source_in_frame: 1,
-            duration_frames: 2, gain_db: 0.0, pan: 0.0, enabled: true,
-        }]);
+        let result = mix_timeline(
+            48_000,
+            1,
+            2,
+            &[AudioClip {
+                source: &source,
+                timeline_start_frame: 0,
+                source_in_frame: 1,
+                duration_frames: 2,
+                gain_db: 0.0,
+                pan: 0.0,
+                enabled: true,
+            }],
+        );
         assert_eq!(result, Err(AudioError::ClipOutOfBounds));
     }
 
     #[test]
     fn validates_pcm_format_and_interleaving() {
         assert_eq!(PcmBuffer::new(0, 2, vec![]), Err(AudioError::InvalidFormat));
-        assert_eq!(PcmBuffer::new(48_000, 2, vec![0.0]), Err(AudioError::InvalidSampleCount));
-        assert_eq!(PcmBuffer::new(48_000, 1, vec![f32::NAN]), Err(AudioError::NonFiniteSample));
+        assert_eq!(
+            PcmBuffer::new(48_000, 2, vec![0.0]),
+            Err(AudioError::InvalidSampleCount)
+        );
+        assert_eq!(
+            PcmBuffer::new(48_000, 1, vec![f32::NAN]),
+            Err(AudioError::NonFiniteSample)
+        );
     }
 
     #[test]
@@ -349,8 +432,14 @@ mod tests {
     fn rejects_mismatched_format_and_invalid_pan() {
         let mut destination = PcmBuffer::silence(48_000, 2, 1).unwrap();
         let mono = PcmBuffer::new(48_000, 1, vec![1.0]).unwrap();
-        assert_eq!(destination.mix_from(&mono, 0, 1.0, 0.0), Err(AudioError::FormatMismatch));
+        assert_eq!(
+            destination.mix_from(&mono, 0, 1.0, 0.0),
+            Err(AudioError::FormatMismatch)
+        );
         let stereo = PcmBuffer::new(48_000, 2, vec![1.0, 1.0]).unwrap();
-        assert_eq!(destination.mix_from(&stereo, 0, 1.0, 2.0), Err(AudioError::InvalidPan));
+        assert_eq!(
+            destination.mix_from(&stereo, 0, 1.0, 2.0),
+            Err(AudioError::InvalidPan)
+        );
     }
 }

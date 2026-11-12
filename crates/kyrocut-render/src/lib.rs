@@ -36,7 +36,11 @@ impl RgbaImage {
                 actual: pixels.len(),
             });
         }
-        Ok(Self { width, height, pixels })
+        Ok(Self {
+            width,
+            height,
+            pixels,
+        })
     }
 
     pub fn transparent(width: u32, height: u32) -> Result<Self, RenderError> {
@@ -96,7 +100,13 @@ pub struct ColorAdjustments {
 
 impl Default for ColorAdjustments {
     fn default() -> Self {
-        Self { exposure_stops: 0.0, contrast: 0.0, saturation: 1.0, gamma: 1.0, brightness: 0.0 }
+        Self {
+            exposure_stops: 0.0,
+            contrast: 0.0,
+            saturation: 1.0,
+            gamma: 1.0,
+            brightness: 0.0,
+        }
     }
 }
 
@@ -153,8 +163,14 @@ pub fn apply_color_adjustments(
 
 /// Return a rectangular crop without changing the source image.
 pub fn crop_image(image: &RgbaImage, crop: CropRect) -> Result<RgbaImage, RenderError> {
-    let right = crop.x.checked_add(crop.width).ok_or(RenderError::InvalidCrop)?;
-    let bottom = crop.y.checked_add(crop.height).ok_or(RenderError::InvalidCrop)?;
+    let right = crop
+        .x
+        .checked_add(crop.width)
+        .ok_or(RenderError::InvalidCrop)?;
+    let bottom = crop
+        .y
+        .checked_add(crop.height)
+        .ok_or(RenderError::InvalidCrop)?;
     if crop.width == 0 || crop.height == 0 || right > image.width || bottom > image.height {
         return Err(RenderError::InvalidCrop);
     }
@@ -175,7 +191,8 @@ pub fn apply_chroma_key(
     threshold: f32,
     softness: f32,
 ) -> Result<RgbaImage, RenderError> {
-    if !threshold.is_finite() || !softness.is_finite()
+    if !threshold.is_finite()
+        || !softness.is_finite()
         || !(0.0..=1.0).contains(&threshold)
         || !(0.0..=1.0).contains(&softness)
     {
@@ -190,7 +207,8 @@ pub fn apply_chroma_key(
                 delta * delta
             })
             .sum::<f32>()
-            .sqrt() / 3.0_f32.sqrt();
+            .sqrt()
+            / 3.0_f32.sqrt();
         let keep = if softness <= f32::EPSILON {
             if distance <= threshold { 0.0 } else { 1.0 }
         } else {
@@ -241,13 +259,30 @@ pub enum RenderError {
 impl fmt::Display for RenderError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidDimensions => write!(f, "image dimensions are invalid or overflow addressable memory"),
-            Self::InvalidBufferLength { expected, actual } => write!(f, "RGBA buffer length mismatch: expected {expected}, got {actual}"),
-            Self::LayerDimensionsMismatch => write!(f, "all compositor layers must match the output dimensions"),
+            Self::InvalidDimensions => write!(
+                f,
+                "image dimensions are invalid or overflow addressable memory"
+            ),
+            Self::InvalidBufferLength { expected, actual } => write!(
+                f,
+                "RGBA buffer length mismatch: expected {expected}, got {actual}"
+            ),
+            Self::LayerDimensionsMismatch => {
+                write!(f, "all compositor layers must match the output dimensions")
+            }
             Self::InvalidOpacity => write!(f, "layer opacity must be finite and between 0 and 1"),
-            Self::InvalidTransform => write!(f, "layer transform values must be finite and scale must be non-zero"),
-            Self::InvalidColorAdjustment => write!(f, "color adjustment values are outside their supported finite ranges"),
-            Self::InvalidCrop => write!(f, "crop rectangle must be non-empty and fully inside the source image"),
+            Self::InvalidTransform => write!(
+                f,
+                "layer transform values must be finite and scale must be non-zero"
+            ),
+            Self::InvalidColorAdjustment => write!(
+                f,
+                "color adjustment values are outside their supported finite ranges"
+            ),
+            Self::InvalidCrop => write!(
+                f,
+                "crop rectangle must be non-empty and fully inside the source image"
+            ),
             Self::InvalidKey => write!(f, "chroma key color and thresholds must be valid"),
         }
     }
@@ -272,7 +307,11 @@ pub fn composite(
         if layer.opacity == 0.0 {
             continue;
         }
-        for (destination, source) in output.pixels.chunks_exact_mut(4).zip(layer.image.pixels.chunks_exact(4)) {
+        for (destination, source) in output
+            .pixels
+            .chunks_exact_mut(4)
+            .zip(layer.image.pixels.chunks_exact(4))
+        {
             blend_pixel(destination, source, layer.opacity, layer.blend_mode);
         }
     }
@@ -292,7 +331,12 @@ pub fn composite_transformed(
         if !layer.opacity.is_finite() || !(0.0..=1.0).contains(&layer.opacity) {
             return Err(RenderError::InvalidOpacity);
         }
-        if transform.position.iter().chain(transform.scale.iter()).chain(transform.anchor.iter()).any(|value| !value.is_finite())
+        if transform
+            .position
+            .iter()
+            .chain(transform.scale.iter())
+            .chain(transform.anchor.iter())
+            .any(|value| !value.is_finite())
             || !transform.rotation_radians.is_finite()
             || transform.scale[0].abs() <= f32::EPSILON
             || transform.scale[1].abs() <= f32::EPSILON
@@ -312,14 +356,16 @@ pub fn composite_transformed(
                 let local_y = -sin * delta_x + cos * delta_y;
                 let source_x = local_x / transform.scale[0] + transform.anchor[0];
                 let source_y = local_y / transform.scale[1] + transform.anchor[1];
-                if source_x < 0.0 || source_y < 0.0
+                if source_x < 0.0
+                    || source_y < 0.0
                     || source_x >= layer.image.width as f32
                     || source_y >= layer.image.height as f32
                 {
                     continue;
                 }
                 let source_index = ((source_y.floor() as usize * layer.image.width as usize)
-                    + source_x.floor() as usize) * 4;
+                    + source_x.floor() as usize)
+                    * 4;
                 let output_index = ((output_y as usize * width as usize) + output_x as usize) * 4;
                 blend_pixel(
                     &mut output.pixels[output_index..output_index + 4],
@@ -355,7 +401,8 @@ fn blend_pixel(destination: &mut [u8], source: &[u8], opacity: f32, mode: BlendM
         let premultiplied = (1.0 - source_alpha) * destination_alpha * destination_channel
             + (1.0 - destination_alpha) * source_alpha * source_channel
             + source_alpha * destination_alpha * blended;
-        destination[channel] = ((premultiplied / output_alpha).clamp(0.0, 1.0) * 255.0).round() as u8;
+        destination[channel] =
+            ((premultiplied / output_alpha).clamp(0.0, 1.0) * 255.0).round() as u8;
     }
 
     destination[3] = (output_alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
@@ -369,10 +416,23 @@ mod tests {
     fn opaque_top_layer_replaces_bottom_layer() {
         let background = RgbaImage::solid(1, 1, [0, 0, 255, 255]).unwrap();
         let foreground = RgbaImage::solid(1, 1, [255, 0, 0, 255]).unwrap();
-        let result = composite(1, 1, &[
-            CompositeLayer { image: &background, opacity: 1.0, blend_mode: BlendMode::Normal },
-            CompositeLayer { image: &foreground, opacity: 1.0, blend_mode: BlendMode::Normal },
-        ]).unwrap();
+        let result = composite(
+            1,
+            1,
+            &[
+                CompositeLayer {
+                    image: &background,
+                    opacity: 1.0,
+                    blend_mode: BlendMode::Normal,
+                },
+                CompositeLayer {
+                    image: &foreground,
+                    opacity: 1.0,
+                    blend_mode: BlendMode::Normal,
+                },
+            ],
+        )
+        .unwrap();
         assert_eq!(result.pixel(0, 0), Some([255, 0, 0, 255]));
     }
 
@@ -380,10 +440,23 @@ mod tests {
     fn half_opacity_source_over_opaque_background_blends_channels() {
         let background = RgbaImage::solid(1, 1, [0, 0, 255, 255]).unwrap();
         let foreground = RgbaImage::solid(1, 1, [255, 0, 0, 255]).unwrap();
-        let result = composite(1, 1, &[
-            CompositeLayer { image: &background, opacity: 1.0, blend_mode: BlendMode::Normal },
-            CompositeLayer { image: &foreground, opacity: 0.5, blend_mode: BlendMode::Normal },
-        ]).unwrap();
+        let result = composite(
+            1,
+            1,
+            &[
+                CompositeLayer {
+                    image: &background,
+                    opacity: 1.0,
+                    blend_mode: BlendMode::Normal,
+                },
+                CompositeLayer {
+                    image: &foreground,
+                    opacity: 0.5,
+                    blend_mode: BlendMode::Normal,
+                },
+            ],
+        )
+        .unwrap();
         assert_eq!(result.pixel(0, 0), Some([128, 0, 127, 255]));
     }
 
@@ -391,10 +464,23 @@ mod tests {
     fn transparent_pixel_does_not_change_output() {
         let background = RgbaImage::solid(1, 1, [10, 20, 30, 255]).unwrap();
         let transparent = RgbaImage::solid(1, 1, [255, 255, 255, 0]).unwrap();
-        let result = composite(1, 1, &[
-            CompositeLayer { image: &background, opacity: 1.0, blend_mode: BlendMode::Normal },
-            CompositeLayer { image: &transparent, opacity: 1.0, blend_mode: BlendMode::Normal },
-        ]).unwrap();
+        let result = composite(
+            1,
+            1,
+            &[
+                CompositeLayer {
+                    image: &background,
+                    opacity: 1.0,
+                    blend_mode: BlendMode::Normal,
+                },
+                CompositeLayer {
+                    image: &transparent,
+                    opacity: 1.0,
+                    blend_mode: BlendMode::Normal,
+                },
+            ],
+        )
+        .unwrap();
         assert_eq!(result.pixel(0, 0), Some([10, 20, 30, 255]));
     }
 
@@ -402,10 +488,23 @@ mod tests {
     fn multiply_blend_mode_combines_source_and_destination() {
         let background = RgbaImage::solid(1, 1, [128, 128, 128, 255]).unwrap();
         let foreground = RgbaImage::solid(1, 1, [128, 64, 255, 255]).unwrap();
-        let result = composite(1, 1, &[
-            CompositeLayer { image: &background, opacity: 1.0, blend_mode: BlendMode::Normal },
-            CompositeLayer { image: &foreground, opacity: 1.0, blend_mode: BlendMode::Multiply },
-        ]).unwrap();
+        let result = composite(
+            1,
+            1,
+            &[
+                CompositeLayer {
+                    image: &background,
+                    opacity: 1.0,
+                    blend_mode: BlendMode::Normal,
+                },
+                CompositeLayer {
+                    image: &foreground,
+                    opacity: 1.0,
+                    blend_mode: BlendMode::Multiply,
+                },
+            ],
+        )
+        .unwrap();
         assert_eq!(result.pixel(0, 0), Some([64, 32, 128, 255]));
     }
 
@@ -413,10 +512,23 @@ mod tests {
     fn screen_blend_mode_lightens_destination() {
         let background = RgbaImage::solid(1, 1, [64, 64, 64, 255]).unwrap();
         let foreground = RgbaImage::solid(1, 1, [128, 128, 128, 255]).unwrap();
-        let result = composite(1, 1, &[
-            CompositeLayer { image: &background, opacity: 1.0, blend_mode: BlendMode::Normal },
-            CompositeLayer { image: &foreground, opacity: 1.0, blend_mode: BlendMode::Screen },
-        ]).unwrap();
+        let result = composite(
+            1,
+            1,
+            &[
+                CompositeLayer {
+                    image: &background,
+                    opacity: 1.0,
+                    blend_mode: BlendMode::Normal,
+                },
+                CompositeLayer {
+                    image: &foreground,
+                    opacity: 1.0,
+                    blend_mode: BlendMode::Screen,
+                },
+            ],
+        )
+        .unwrap();
         assert_eq!(result.pixel(0, 0), Some([160, 160, 160, 255]));
     }
 
@@ -424,24 +536,45 @@ mod tests {
     fn additive_blend_mode_saturates_channels() {
         let background = RgbaImage::solid(1, 1, [200, 100, 10, 255]).unwrap();
         let foreground = RgbaImage::solid(1, 1, [100, 180, 20, 255]).unwrap();
-        let result = composite(1, 1, &[
-            CompositeLayer { image: &background, opacity: 1.0, blend_mode: BlendMode::Normal },
-            CompositeLayer { image: &foreground, opacity: 1.0, blend_mode: BlendMode::Add },
-        ]).unwrap();
+        let result = composite(
+            1,
+            1,
+            &[
+                CompositeLayer {
+                    image: &background,
+                    opacity: 1.0,
+                    blend_mode: BlendMode::Normal,
+                },
+                CompositeLayer {
+                    image: &foreground,
+                    opacity: 1.0,
+                    blend_mode: BlendMode::Add,
+                },
+            ],
+        )
+        .unwrap();
         assert_eq!(result.pixel(0, 0), Some([255, 255, 30, 255]));
     }
 
     #[test]
     fn transformed_compositor_positions_a_source_layer() {
         let source = RgbaImage::solid(2, 1, [255, 0, 0, 255]).unwrap();
-        let result = composite_transformed(4, 1, &[TransformedLayer {
-            image: &source,
-            transform: Transform2D {
-                position: [1.0, 0.5], scale: [1.0, 1.0],
-                rotation_radians: 0.0, anchor: [0.0, 0.0],
-            },
-            opacity: 1.0, blend_mode: BlendMode::Normal,
-        }]).unwrap();
+        let result = composite_transformed(
+            4,
+            1,
+            &[TransformedLayer {
+                image: &source,
+                transform: Transform2D {
+                    position: [1.0, 0.5],
+                    scale: [1.0, 1.0],
+                    rotation_radians: 0.0,
+                    anchor: [0.0, 0.0],
+                },
+                opacity: 1.0,
+                blend_mode: BlendMode::Normal,
+            }],
+        )
+        .unwrap();
         assert_eq!(result.pixel(0, 0), Some([0, 0, 0, 0]));
         assert_eq!(result.pixel(1, 0), Some([255, 0, 0, 255]));
         assert_eq!(result.pixel(2, 0), Some([255, 0, 0, 255]));
@@ -451,14 +584,21 @@ mod tests {
     #[test]
     fn transformed_compositor_rejects_zero_scale() {
         let source = RgbaImage::solid(1, 1, [255, 255, 255, 255]).unwrap();
-        let result = composite_transformed(1, 1, &[TransformedLayer {
-            image: &source,
-            transform: Transform2D {
-                position: [0.5, 0.5], scale: [0.0, 1.0],
-                rotation_radians: 0.0, anchor: [0.5, 0.5],
-            },
-            opacity: 1.0, blend_mode: BlendMode::Normal,
-        }]);
+        let result = composite_transformed(
+            1,
+            1,
+            &[TransformedLayer {
+                image: &source,
+                transform: Transform2D {
+                    position: [0.5, 0.5],
+                    scale: [0.0, 1.0],
+                    rotation_radians: 0.0,
+                    anchor: [0.5, 0.5],
+                },
+                opacity: 1.0,
+                blend_mode: BlendMode::Normal,
+            }],
+        );
         assert_eq!(result, Err(RenderError::InvalidTransform));
     }
 
@@ -466,36 +606,76 @@ mod tests {
     fn rejects_mismatched_layer_dimensions() {
         let layer = RgbaImage::solid(2, 2, [0, 0, 0, 255]).unwrap();
         assert_eq!(
-            composite(1, 1, &[CompositeLayer { image: &layer, opacity: 1.0, blend_mode: BlendMode::Normal }]),
+            composite(
+                1,
+                1,
+                &[CompositeLayer {
+                    image: &layer,
+                    opacity: 1.0,
+                    blend_mode: BlendMode::Normal
+                }]
+            ),
             Err(RenderError::LayerDimensionsMismatch)
         );
     }
 
-
     #[test]
     fn color_adjustments_preserve_alpha_and_validate_ranges() {
         let source = RgbaImage::solid(1, 1, [100, 120, 140, 77]).unwrap();
-        let result = apply_color_adjustments(&source, ColorAdjustments {
-            exposure_stops: 1.0, ..ColorAdjustments::default()
-        }).unwrap();
+        let result = apply_color_adjustments(
+            &source,
+            ColorAdjustments {
+                exposure_stops: 1.0,
+                ..ColorAdjustments::default()
+            },
+        )
+        .unwrap();
         assert_eq!(result.pixel(0, 0), Some([200, 240, 255, 77]));
         assert_eq!(
-            apply_color_adjustments(&source, ColorAdjustments { gamma: 0.0, ..ColorAdjustments::default() }),
+            apply_color_adjustments(
+                &source,
+                ColorAdjustments {
+                    gamma: 0.0,
+                    ..ColorAdjustments::default()
+                }
+            ),
             Err(RenderError::InvalidColorAdjustment)
         );
     }
 
     #[test]
     fn crop_image_returns_requested_rectangle() {
-        let source = RgbaImage::new(2, 2, vec![
-            1, 0, 0, 255, 2, 0, 0, 255,
-            3, 0, 0, 255, 4, 0, 0, 255,
-        ]).unwrap();
-        let cropped = crop_image(&source, CropRect { x: 1, y: 0, width: 1, height: 2 }).unwrap();
+        let source = RgbaImage::new(
+            2,
+            2,
+            vec![1, 0, 0, 255, 2, 0, 0, 255, 3, 0, 0, 255, 4, 0, 0, 255],
+        )
+        .unwrap();
+        let cropped = crop_image(
+            &source,
+            CropRect {
+                x: 1,
+                y: 0,
+                width: 1,
+                height: 2,
+            },
+        )
+        .unwrap();
         assert_eq!(cropped.width, 1);
         assert_eq!(cropped.height, 2);
         assert_eq!(cropped.pixels(), &[2, 0, 0, 255, 4, 0, 0, 255]);
-        assert_eq!(crop_image(&source, CropRect { x: 1, y: 1, width: 2, height: 1 }), Err(RenderError::InvalidCrop));
+        assert_eq!(
+            crop_image(
+                &source,
+                CropRect {
+                    x: 1,
+                    y: 1,
+                    width: 2,
+                    height: 1
+                }
+            ),
+            Err(RenderError::InvalidCrop)
+        );
     }
 
     #[test]
@@ -510,7 +690,15 @@ mod tests {
     fn rejects_invalid_opacity() {
         let layer = RgbaImage::solid(1, 1, [0, 0, 0, 255]).unwrap();
         assert_eq!(
-            composite(1, 1, &[CompositeLayer { image: &layer, opacity: f32::NAN, blend_mode: BlendMode::Normal }]),
+            composite(
+                1,
+                1,
+                &[CompositeLayer {
+                    image: &layer,
+                    opacity: f32::NAN,
+                    blend_mode: BlendMode::Normal
+                }]
+            ),
             Err(RenderError::InvalidOpacity)
         );
     }
