@@ -52,6 +52,9 @@ pub enum MediaError {
     MissingVideoStream,
     Decoder(String),
     InvalidFrame(String),
+    Audio(String),
+    Render(String),
+    Project(String),
 }
 
 impl std::fmt::Display for MediaError {
@@ -62,6 +65,9 @@ impl std::fmt::Display for MediaError {
             Self::MissingVideoStream => write!(formatter, "media contains no video stream"),
             Self::Decoder(message) => write!(formatter, "video decoder failed: {message}"),
             Self::InvalidFrame(message) => write!(formatter, "invalid decoded frame: {message}"),
+            Self::Audio(message) => write!(formatter, "audio decoding failed: {message}"),
+            Self::Render(message) => write!(formatter, "timeline compositing failed: {message}"),
+            Self::Project(message) => write!(formatter, "invalid project for media rendering: {message}"),
         }
     }
 }
@@ -154,13 +160,14 @@ pub fn decode_video_frames(
     ).map_err(|error| MediaError::Decoder(error.to_string()))?;
 
     let mut frames = Vec::with_capacity(max_frames.min(16));
+    let mut decoded_count = 0usize;
     for (stream, packet) in input.packets() {
         if stream.index() != stream_index {
             continue;
         }
         decoder.send_packet(&packet)
             .map_err(|error| MediaError::Decoder(error.to_string()))?;
-        drain_video_frames(&mut decoder, &mut scaler, &mut frames, max_frames)?;
+        drain_video_frames(&mut decoder, &mut scaler, &mut frames, max_frames, 0, &mut decoded_count)?;
         if frames.len() >= max_frames {
             break;
         }
@@ -169,7 +176,7 @@ pub fn decode_video_frames(
     if frames.len() < max_frames {
         decoder.send_eof()
             .map_err(|error| MediaError::Decoder(error.to_string()))?;
-        drain_video_frames(&mut decoder, &mut scaler, &mut frames, max_frames)?;
+        drain_video_frames(&mut decoder, &mut scaler, &mut frames, max_frames, 0, &mut decoded_count)?;
     }
 
     Ok(frames)
@@ -180,9 +187,16 @@ fn drain_video_frames(
     scaler: &mut ffmpeg::software::scaling::Context,
     output: &mut Vec<DecodedVideoFrame>,
     limit: usize,
+    skip_until: usize,
+    decoded_count: &mut usize,
 ) -> Result<(), MediaError> {
     let mut decoded = ffmpeg::frame::Video::empty();
     while output.len() < limit && decoder.receive_frame(&mut decoded).is_ok() {
+        let current_index = *decoded_count;
+        *decoded_count = decoded_count.saturating_add(1);
+        if current_index < skip_until {
+            continue;
+        }
         let mut rgba = ffmpeg::frame::Video::empty();
         scaler.run(&decoded, &mut rgba)
             .map_err(|error| MediaError::Decoder(error.to_string()))?;
@@ -242,4 +256,140 @@ mod tests {
         };
         assert_eq!(frame.rgba.len(), frame.width as usize * frame.height as usize * 4);
     }
+}
+
+
+/// Decode one source frame by zero-based presentation order. This performs a
+/// sequential decode from the beginning, so it is correct but not yet an
+/// optimized random-access seek implementation.
+pub fn decode_video_frame_at(
+    path: impl AsRef<Path>,
+    frame_index: usize,
+) -> Result<DecodedVideoFrame, MediaError> {
+    initialize()?;
+    let mut input = ffmpeg::format::input(path.as_ref())
+        .map_err(|error| MediaError::Open(error.to_string()))?;
+    let (stream_index, mut decoder) = {
+        let stream = input.streams().best(ffmpeg::media::Type::Video)
+            .ok_or(MediaError::MissingVideoStream)?;
+        let stream_index = stream.index();
+        let decoder = ffmpeg::codec::context::Context::from_parameters(stream.parameters())
+            .and_then(|context| context.decoder().video())
+            .map_err(|error| MediaError::Decoder(error.to_string()))?;
+        (stream_index, decoder)
+    };
+    let mut scaler = ffmpeg::software::scaling::Context::get(
+        decoder.format(), decoder.width(), decoder.height(),
+        ffmpeg::format::Pixel::RGBA, decoder.width(), decoder.height(),
+        ffmpeg::software::scaling::Flags::BILINEAR,
+    ).map_err(|error| MediaError::Decoder(error.to_string()))?;
+
+    let mut selected = Vec::with_capacity(1);
+    let mut decoded_count = 0usize;
+    for (stream, packet) in input.packets() {
+        if stream.index() == stream_index {
+            decoder.send_packet(&packet)
+                .map_err(|error| MediaError::Decoder(error.to_string()))?;
+            drain_video_frames(&mut decoder, &mut scaler, &mut selected, 1, frame_index, &mut decoded_count)?;
+            if !selected.is_empty() { return Ok(selected.remove(0)); }
+        }
+    }
+    decoder.send_eof().map_err(|error| MediaError::Decoder(error.to_string()))?;
+    drain_video_frames(&mut decoder, &mut scaler, &mut selected, 1, frame_index, &mut decoded_count)?;
+    selected.pop().ok_or_else(|| MediaError::InvalidFrame(format!("source frame {frame_index} does not exist")))
+}
+
+/// Decode a source audio stream to the editor's standard 48 kHz stereo float
+/// PCM format. The returned buffer can be passed directly to kyrocut-audio.
+pub fn decode_audio_f32_stereo(path: impl AsRef<Path>) -> Result<kyrocut_audio::PcmBuffer, MediaError> {
+    initialize()?;
+    let mut input = ffmpeg::format::input(path.as_ref())
+        .map_err(|error| MediaError::Open(error.to_string()))?;
+    let (stream_index, mut decoder) = {
+        let stream = input.streams().best(ffmpeg::media::Type::Audio)
+            .ok_or_else(|| MediaError::Audio("media contains no audio stream".into()))?;
+        let stream_index = stream.index();
+        let decoder = ffmpeg::codec::context::Context::from_parameters(stream.parameters())
+            .and_then(|context| context.decoder().audio())
+            .map_err(|error| MediaError::Audio(error.to_string()))?;
+        (stream_index, decoder)
+    };
+    let mut resampler = decoder.resampler(
+        ffmpeg::format::Sample::F32(ffmpeg::format::sample::Type::Packed),
+        ffmpeg::ChannelLayout::STEREO,
+        48_000,
+    ).map_err(|error| MediaError::Audio(error.to_string()))?;
+
+    let mut samples = Vec::<f32>::new();
+    let mut decoded = ffmpeg::frame::Audio::empty();
+    let mut converted = ffmpeg::frame::Audio::empty();
+    for (stream, packet) in input.packets() {
+        if stream.index() != stream_index { continue; }
+        decoder.send_packet(&packet)
+            .map_err(|error| MediaError::Audio(error.to_string()))?;
+        while decoder.receive_frame(&mut decoded).is_ok() {
+            resampler.run(&decoded, &mut converted)
+                .map_err(|error| MediaError::Audio(error.to_string()))?;
+            if converted.samples() > 0 {
+                samples.extend_from_slice(converted.plane::<f32>(0));
+            }
+        }
+    }
+    decoder.send_eof().map_err(|error| MediaError::Audio(error.to_string()))?;
+    while decoder.receive_frame(&mut decoded).is_ok() {
+        resampler.run(&decoded, &mut converted)
+            .map_err(|error| MediaError::Audio(error.to_string()))?;
+        if converted.samples() > 0 {
+            samples.extend_from_slice(converted.plane::<f32>(0));
+        }
+    }
+    while resampler.flush(&mut converted).map_err(|error| MediaError::Audio(error.to_string()))?.is_some() {
+        if converted.samples() > 0 {
+            samples.extend_from_slice(converted.plane::<f32>(0));
+        }
+    }
+    kyrocut_audio::PcmBuffer::new(48_000, 2, samples)
+        .map_err(|error| MediaError::Audio(error.to_string()))
+}
+
+/// Evaluate the shared Rust project timeline and composite active video clips
+/// at a timeline frame. Media paths are resolved by stable project media ID.
+/// Audio tracks are intentionally rendered by the separate PCM mixer.
+pub fn render_timeline_video_frame(
+    project: &kyrocut_core::Project,
+    timeline_frame: kyrocut_core::Frame,
+    media_paths: &std::collections::HashMap<String, PathBuf>,
+) -> Result<kyrocut_render::RgbaImage, MediaError> {
+    project.validate().map_err(|error| MediaError::Project(error.to_string()))?;
+    let mut images = Vec::new();
+    for active in project.active_clips_at(timeline_frame) {
+        let track = project.tracks.iter().find(|track| track.id == active.track_id)
+            .ok_or_else(|| MediaError::Project(format!("missing track {}", active.track_id)))?;
+        if !matches!(track.kind, kyrocut_core::TrackKind::Video | kyrocut_core::TrackKind::Graphics) {
+            continue;
+        }
+        let media = project.media.iter().find(|media| media.id == active.clip.media_id)
+            .ok_or_else(|| MediaError::Project(format!("missing media {}", active.clip.media_id)))?;
+        if media.kind != kyrocut_core::MediaKind::Video { continue; }
+        let path = media_paths.get(&media.id)
+            .ok_or_else(|| MediaError::Open(format!("no linked file for media {}", media.id)))?;
+        let frame = decode_video_frame_at(path, active.source_frame.0 as usize)?;
+        let image = kyrocut_render::RgbaImage::new(frame.width, frame.height, frame.rgba)
+            .map_err(|error| MediaError::Render(error.to_string()))?;
+        images.push(image);
+    }
+
+    let layers = images.iter().map(|image| kyrocut_render::TransformedLayer {
+        image,
+        transform: kyrocut_render::Transform2D {
+            position: [project.width as f32 / 2.0, project.height as f32 / 2.0],
+            scale: [project.width as f32 / image.width as f32, project.height as f32 / image.height as f32],
+            rotation_radians: 0.0,
+            anchor: [image.width as f32 / 2.0, image.height as f32 / 2.0],
+        },
+        opacity: 1.0,
+        blend_mode: kyrocut_render::BlendMode::Normal,
+    }).collect::<Vec<_>>();
+    kyrocut_render::composite_transformed(project.width, project.height, &layers)
+        .map_err(|error| MediaError::Render(error.to_string()))
 }
