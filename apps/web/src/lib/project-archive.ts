@@ -54,7 +54,6 @@ export async function encodeProjectArchive(
         : asset.locator,
     })),
   }
-  const files: Array<{ name: string; blob: Blob; crc: number; size: number; nameBytes: Uint8Array; offset: number }> = []
   const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' })
   const entries = [{ name: 'project.json', blob: manifestBlob }, ...manifest.media.flatMap((asset) => {
     const blob = mediaBlobs.get(asset.id)
