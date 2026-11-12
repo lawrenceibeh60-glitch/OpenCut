@@ -10,11 +10,13 @@ use serde::{Deserialize, Serialize};
 
 mod animation;
 mod commands;
+mod compositing_graph;
 mod history;
 
 pub use animation::{CurveError, Interpolation, ScalarCurve, ScalarKeyframe};
 
 pub use commands::EditCommand;
+pub use compositing_graph::{CompositingGraph, GraphConnection, GraphDocumentError, GraphEndpoint, GraphError, GraphNode, GraphSocket, NodeOperation, SocketType};
 pub use history::ProjectHistory;
 
 pub const PROJECT_FORMAT: &str = "kyrocut-project";
