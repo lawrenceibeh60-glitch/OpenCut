@@ -1,78 +1,86 @@
-<table width="100%">
-  <tr>
-    <td align="left" width="120">
-      <img src="https://assets.opencut.app/branding/symbol.svg" alt="OpenCut Logo" width="100" />
-    </td>
-    <td align="right">
-      <h1>OpenCut</h1>
-      <h3 style="margin-top: -10px;">A free and open source video editor for web, desktop, and mobile.</h3>
-    </td>
-  </tr>
-</table>
+# KYROCUT X1
 
-[![Discord](https://img.shields.io/discord/1386309140057690133?label=Discord&logo=discord&logoColor=fff&color=5865F2&style=flat)](https://discord.gg/zmR9N35cjK)
-[![X](https://img.shields.io/badge/follow-%40opencutapp-000?logo=x&logoColor=fff&style=flat)](https://x.com/opencutapp)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat)](LICENSE)
+**A cross-platform creative production system for video editing, compositing, motion graphics and 3D.**
 
-## Status
+KYROCUT X1 is being developed as a shared creative platform with a browser editor and a native desktop application. Both editions are designed around one project model and a shared Rust core so projects and editing semantics can remain portable across platforms.
 
-**OpenCut is being rewritten from the ground up.** What's coming:
+> This repository is an active foundation build. The web edition currently contains an early interactive editing workspace for importing local media, arranging clips on tracks, previewing selected source media, adjusting clip timing and saving a versioned project manifest. Native rendering, full timeline playback, effects processing, audio mixing, compositing and 3D are not yet complete. UI surfaces are not presented as implemented engine features.
 
-- An Editor API
-- First-class third party plugins (made possible by a plugin-first architecture)
-- Desktop, mobile, and browser from one codebase (Rust core)
-- MCP server (for AI agents)
-- Headless mode (automation, batch rendering)
-- A scripting tab directly in the editor
+## Product editions
 
-You can still find the previous version at [opencut-app/opencut-classic](https://github.com/opencut-app/opencut-classic), which is the one to reach for today. [opencut.app](https://opencut.app) still runs the classic version. The rewrite will live at [new.opencut.app](https://new.opencut.app) until it's ready to take over.
+- **Web:** React 19, TypeScript, Vite and TanStack Start. Runs in a modern browser and uses browser media APIs for the initial import and source-preview workflow.
+- **Desktop:** Rust and GPUI. Intended for native media access, higher-throughput processing and platform GPU integration.
+- **Shared engine:** Rust crates for frame-accurate project, media and timeline domain logic.
+
+## Current foundation
+
+- Shared Rust core crate: rational frame-rate handling, frame/time conversion, media references, tracks, clips, project duration and validation.
+- Web editor: local media import, media bin, video/image source preview, track creation, clip placement, clip selection, basic timing adjustments, track mute/lock flags and .kcx1 project-manifest download.
+- Product identity and landing page for KYROCUT X1.
+- Desktop application identity updated and wired to the shared core crate.
+
+## Planned engine modules
+
+1. Project model, serialization and migrations
+2. Media probing, demuxing, decoding and frame scheduling
+3. Timeline evaluation and edit commands
+4. Preview compositor and render graph
+5. Keyframe and animation evaluation
+6. Audio graph and mixing
+7. Color pipeline and scopes
+8. GPU effects and 2D/3D rendering
+9. Export, render queue and delivery presets
+10. Plugin and scripting APIs
+
+The pinned FFmpeg build configuration in this repository is an upstream starting point, not a complete media engine integration. Its current configure flags must be reviewed before enabling filters, device capture, networking or other optional components.
 
 ## Development
 
-Install [proto](https://moonrepo.dev/proto) if you haven't already:
-
-**Linux, macOS, WSL:**
+Install the toolchain pinned in .prototools:
 
 ```sh
-bash <(curl -fsSL https://moonrepo.dev/install/proto.sh)
+proto use
 ```
 
-**Windows (PowerShell):**
-
-```powershell
-irm https://moonrepo.dev/install/proto.ps1 | iex
-```
-
-If shims fail to run, allow local scripts for your user:
-
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
-
-From the repo root:
+Run the browser app:
 
 ```sh
-proto use    # installs the tools pinned in .prototools
+moon run web:dev
 ```
+
+Run the API:
 
 ```sh
-moon run web:dev       # localhost:5173
-moon run api:dev       # localhost:8787
-moon run desktop:dev   # see apps/desktop/README.md
+moon run api:dev
 ```
 
-## Contributing
+Run the desktop app:
 
-We're not set up to take outside contributions yet while the architecture is being designed. If you want to follow along, ask questions, or just hang out, [join the Discord](https://discord.gg/zmR9N35cjK) or [open an issue](https://github.com/opencut-app/opencut/issues).
+```sh
+moon run desktop:dev
+```
 
-## Sponsors
+Check and test the shared Rust core:
 
-OpenCut is supported by companies that believe in open source creator tools.
+```sh
+cargo check -p kyrocut-core
+cargo test -p kyrocut-core
+```
 
-- [**fal.ai**](https://fal.ai?utm_source=github-opencut&utm_campaign=oss): Generative image, video, and audio models all in one place.
+Build the web app:
 
-Want your logo here? Reach out at [sponsor@opencut.app](mailto:sponsor@opencut.app).
+```sh
+moon run web:build
+```
+
+## Project manifest
+
+The web foundation exports a .kcx1 project manifest using the kyrocut-project format identifier and version 1. It stores project settings, track structure, clip timing and portable media locators. Media binaries are deliberately not embedded in the JSON manifest. A complete relinking and asset-packaging workflow is still required before project interchange is production-ready.
+
+## Upstream
+
+KYROCUT X1 began from the open-source OpenCut rewrite. The original project is available at https://github.com/OpenCut-app/OpenCut. Existing MIT licensing and applicable upstream notices are retained. KYROCUT X1 is an independent product direction and is not affiliated with the original maintainers.
 
 ## License
 
-[MIT](LICENSE)
+MIT. See LICENSE.
