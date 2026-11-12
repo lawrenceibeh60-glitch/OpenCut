@@ -136,7 +136,7 @@ function Editor() {
     }
     const rightClip: TimelineClip = {
       id: createId(), mediaId: selectedClip.mediaId, start: selectedClip.start + splitOffset,
-      sourceIn: selectedClip.sourceIn + splitOffset, duration: selectedClip.duration - splitOffset,
+      sourceIn: selectedClip.sourceIn + splitOffset, duration: selectedClip.duration - splitOffset, enabled: selectedClip.enabled,
     }
     setTracks((current) => current.map((track) => track.id === selectedClip.trackId
       ? { ...track, clips: track.clips.flatMap((clip) => clip.id === selectedClip.id
