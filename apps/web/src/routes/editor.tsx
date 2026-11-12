@@ -50,7 +50,7 @@ function Editor() {
   const allClips = useMemo(() => tracks.flatMap((track) => track.clips.map((clip) => ({ ...clip, trackId: track.id }))), [tracks])
   const selectedClip = allClips.find((clip) => clip.id === selectedClipId) ?? null
   const selectedAsset = assets.find((asset) => asset.id === selectedClip?.mediaId) ?? null
-  const projectDuration = Math.max(30, ...allClips.map((clip) => clip.start + clip.duration))
+  const projectDuration = Math.max(30, ...allClips.filter((clip) => clip.enabled).map((clip) => clip.start + clip.duration))
   const selectedTrack = tracks.find((track) => track.clips.some((clip) => clip.id === selectedClipId))
   const missingAssets = assets.filter((asset) => !asset.url)
 
