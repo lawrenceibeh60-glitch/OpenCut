@@ -7,15 +7,12 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use kyrocut_core::{
-    CompositingGraph, GraphError, GraphNode, NodeOperation,
-};
+use kyrocut_core::{CompositingGraph, GraphError, GraphNode, NodeOperation};
 use serde_json::Value;
 
 use crate::{
-    apply_chroma_key, apply_color_adjustments, composite, composite_transformed,
-    BlendMode, ColorAdjustments, CompositeLayer, RenderError, RgbaImage,
-    Transform2D, TransformedLayer,
+    BlendMode, ColorAdjustments, CompositeLayer, RenderError, RgbaImage, Transform2D,
+    TransformedLayer, apply_chroma_key, apply_color_adjustments, composite, composite_transformed,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -37,7 +34,10 @@ impl fmt::Display for GraphRenderError {
             Self::InvalidGraph(error) => write!(f, "invalid compositing graph: {error}"),
             Self::MissingSource(id) => write!(f, "no image source was provided for media ID {id}"),
             Self::MissingParameter { node_id, parameter } => {
-                write!(f, "node {node_id} is missing required parameter {parameter}")
+                write!(
+                    f,
+                    "node {node_id} is missing required parameter {parameter}"
+                )
             }
             Self::InvalidParameter { node_id, parameter } => {
                 write!(f, "node {node_id} has an invalid parameter {parameter}")
@@ -47,10 +47,16 @@ impl fmt::Display for GraphRenderError {
             }
             Self::MissingOutput => write!(f, "compositing graph did not produce an Output image"),
             Self::ValueTypeMismatch { node_id, socket_id } => {
-                write!(f, "node {node_id} received the wrong value type on socket {socket_id}")
+                write!(
+                    f,
+                    "node {node_id} received the wrong value type on socket {socket_id}"
+                )
             }
             Self::ImageDimensionsMismatch => {
-                write!(f, "blend inputs and optional mask must have matching dimensions")
+                write!(
+                    f,
+                    "blend inputs and optional mask must have matching dimensions"
+                )
             }
             Self::Render(error) => write!(f, "render operation failed: {error}"),
         }
@@ -83,25 +89,40 @@ pub fn render_compositing_graph(
 ) -> Result<RgbaImage, GraphRenderError> {
     graph.validate().map_err(GraphRenderError::InvalidGraph)?;
 
-    let nodes = graph.nodes.iter().map(|node| (node.id.as_str(), node)).collect::<HashMap<_, _>>();
+    let nodes = graph
+        .nodes
+        .iter()
+        .map(|node| (node.id.as_str(), node))
+        .collect::<HashMap<_, _>>();
     let mut incoming = HashMap::new();
     for connection in &graph.connections {
         incoming.insert(
-            (connection.to.node_id.as_str(), connection.to.socket_id.as_str()),
-            (connection.from.node_id.as_str(), connection.from.socket_id.as_str()),
+            (
+                connection.to.node_id.as_str(),
+                connection.to.socket_id.as_str(),
+            ),
+            (
+                connection.from.node_id.as_str(),
+                connection.from.socket_id.as_str(),
+            ),
         );
     }
 
     let mut values: HashMap<(String, String), GraphValue> = HashMap::new();
-    for node_id in graph.execution_order().map_err(GraphRenderError::InvalidGraph)? {
-        let node = nodes.get(node_id.as_str()).copied()
-            .ok_or_else(|| GraphRenderError::InvalidGraph(GraphError::MissingNode(node_id.clone())))?;
+    for node_id in graph
+        .execution_order()
+        .map_err(GraphRenderError::InvalidGraph)?
+    {
+        let node = nodes.get(node_id.as_str()).copied().ok_or_else(|| {
+            GraphRenderError::InvalidGraph(GraphError::MissingNode(node_id.clone()))
+        })?;
 
         match node.operation {
             NodeOperation::MediaSource => {
                 let media_id = string_parameter(node, "mediaId", true)?
                     .ok_or_else(|| missing_parameter(node, "mediaId"))?;
-                let image = media_sources.get(media_id)
+                let image = media_sources
+                    .get(media_id)
                     .ok_or_else(|| GraphRenderError::MissingSource(media_id.to_owned()))?
                     .clone();
                 values.insert((node.id.clone(), "image".into()), GraphValue::Image(image));
@@ -123,13 +144,20 @@ pub fn render_compositing_graph(
                         number_parameter(node, "anchorY", image.height as f64 / 2.0)? as f32,
                     ],
                 };
-                let transformed = composite_transformed(width, height, &[TransformedLayer {
-                    image: &image,
-                    transform,
-                    opacity: number_parameter(node, "opacity", 1.0)? as f32,
-                    blend_mode: BlendMode::Normal,
-                }])?;
-                values.insert((node.id.clone(), "image".into()), GraphValue::Image(transformed));
+                let transformed = composite_transformed(
+                    width,
+                    height,
+                    &[TransformedLayer {
+                        image: &image,
+                        transform,
+                        opacity: number_parameter(node, "opacity", 1.0)? as f32,
+                        blend_mode: BlendMode::Normal,
+                    }],
+                )?;
+                values.insert(
+                    (node.id.clone(), "image".into()),
+                    GraphValue::Image(transformed),
+                );
             }
             NodeOperation::ColorGrade => {
                 let image = image_input(node, "image", &incoming, &values)?;
@@ -178,7 +206,10 @@ pub fn render_compositing_graph(
                         return Err(GraphRenderError::ImageDimensionsMismatch);
                     }
                     let mut pixels = foreground.pixels().to_vec();
-                    for (pixel, mask_pixel) in pixels.as_chunks_mut::<4>().0.iter_mut()
+                    for (pixel, mask_pixel) in pixels
+                        .as_chunks_mut::<4>()
+                        .0
+                        .iter_mut()
                         .zip(mask.pixels().as_chunks::<4>().0.iter())
                     {
                         pixel[3] = (pixel[3] as u16 * mask_pixel[3] as u16 / 255) as u8;
@@ -186,14 +217,22 @@ pub fn render_compositing_graph(
                     foreground = RgbaImage::new(foreground.width, foreground.height, pixels)?;
                 }
                 let mode = blend_mode_parameter(node)?;
-                let result = composite(base.width, base.height, &[
-                    CompositeLayer { image: &base, opacity: 1.0, blend_mode: BlendMode::Normal },
-                    CompositeLayer {
-                        image: &foreground,
-                        opacity: number_parameter(node, "opacity", 1.0)? as f32,
-                        blend_mode: mode,
-                    },
-                ])?;
+                let result = composite(
+                    base.width,
+                    base.height,
+                    &[
+                        CompositeLayer {
+                            image: &base,
+                            opacity: 1.0,
+                            blend_mode: BlendMode::Normal,
+                        },
+                        CompositeLayer {
+                            image: &foreground,
+                            opacity: number_parameter(node, "opacity", 1.0)? as f32,
+                            blend_mode: mode,
+                        },
+                    ],
+                )?;
                 values.insert((node.id.clone(), "image".into()), GraphValue::Image(result));
             }
             NodeOperation::Output => {
@@ -203,7 +242,9 @@ pub fn render_compositing_graph(
         }
     }
 
-    let output_node = graph.nodes.iter()
+    let output_node = graph
+        .nodes
+        .iter()
         .find(|node| node.operation == NodeOperation::Output)
         .ok_or(GraphRenderError::MissingOutput)?;
     match values.get(&(output_node.id.clone(), "result".into())) {
@@ -213,7 +254,10 @@ pub fn render_compositing_graph(
 }
 
 fn missing_parameter(node: &GraphNode, parameter: &str) -> GraphRenderError {
-    GraphRenderError::MissingParameter { node_id: node.id.clone(), parameter: parameter.into() }
+    GraphRenderError::MissingParameter {
+        node_id: node.id.clone(),
+        parameter: parameter.into(),
+    }
 }
 
 fn string_parameter<'a>(
@@ -224,7 +268,8 @@ fn string_parameter<'a>(
     match node.parameters.get(parameter) {
         Some(Value::String(value)) if !value.trim().is_empty() => Ok(Some(value)),
         Some(_) => Err(GraphRenderError::InvalidParameter {
-            node_id: node.id.clone(), parameter: parameter.into(),
+            node_id: node.id.clone(),
+            parameter: parameter.into(),
         }),
         None if required => Err(missing_parameter(node, parameter)),
         None => Ok(None),
@@ -236,34 +281,49 @@ fn number_parameter(
     parameter: &str,
     default: f64,
 ) -> Result<f64, GraphRenderError> {
-    let Some(value) = node.parameters.get(parameter) else { return Ok(default); };
-    let number = value.as_f64().ok_or_else(|| GraphRenderError::InvalidParameter {
-        node_id: node.id.clone(), parameter: parameter.into(),
-    })?;
+    let Some(value) = node.parameters.get(parameter) else {
+        return Ok(default);
+    };
+    let number = value
+        .as_f64()
+        .ok_or_else(|| GraphRenderError::InvalidParameter {
+            node_id: node.id.clone(),
+            parameter: parameter.into(),
+        })?;
     if !number.is_finite() {
         return Err(GraphRenderError::InvalidParameter {
-            node_id: node.id.clone(), parameter: parameter.into(),
+            node_id: node.id.clone(),
+            parameter: parameter.into(),
         });
     }
     Ok(number)
 }
 
 fn color_parameter(node: &GraphNode) -> Result<[u8; 3], GraphRenderError> {
-    let value = node.parameters.get("keyRgb")
+    let value = node
+        .parameters
+        .get("keyRgb")
         .ok_or_else(|| missing_parameter(node, "keyRgb"))?;
-    let values = value.as_array().ok_or_else(|| GraphRenderError::InvalidParameter {
-        node_id: node.id.clone(), parameter: "keyRgb".into(),
-    })?;
+    let values = value
+        .as_array()
+        .ok_or_else(|| GraphRenderError::InvalidParameter {
+            node_id: node.id.clone(),
+            parameter: "keyRgb".into(),
+        })?;
     if values.len() != 3 {
         return Err(GraphRenderError::InvalidParameter {
-            node_id: node.id.clone(), parameter: "keyRgb".into(),
+            node_id: node.id.clone(),
+            parameter: "keyRgb".into(),
         });
     }
     let mut color = [0; 3];
     for (index, value) in values.iter().enumerate() {
-        let channel = value.as_u64().filter(|channel| *channel <= 255)
+        let channel = value
+            .as_u64()
+            .filter(|channel| *channel <= 255)
             .ok_or_else(|| GraphRenderError::InvalidParameter {
-                node_id: node.id.clone(), parameter: "keyRgb".into(),
+                node_id: node.id.clone(),
+                parameter: "keyRgb".into(),
             })?;
         color[index] = channel as u8;
     }
@@ -277,7 +337,8 @@ fn blend_mode_parameter(node: &GraphNode) -> Result<BlendMode, GraphRenderError>
         Some("screen") => Ok(BlendMode::Screen),
         Some("add") => Ok(BlendMode::Add),
         Some(_) => Err(GraphRenderError::InvalidParameter {
-            node_id: node.id.clone(), parameter: "blendMode".into(),
+            node_id: node.id.clone(),
+            parameter: "blendMode".into(),
         }),
     }
 }
@@ -288,15 +349,18 @@ fn image_input(
     incoming: &HashMap<(&str, &str), (&str, &str)>,
     values: &HashMap<(String, String), GraphValue>,
 ) -> Result<RgbaImage, GraphRenderError> {
-    let (source_node, source_socket) = incoming.get(&(node.id.as_str(), socket_id))
+    let (source_node, source_socket) = incoming
+        .get(&(node.id.as_str(), socket_id))
         .copied()
         .ok_or_else(|| GraphRenderError::MissingInput {
-            node_id: node.id.clone(), socket_id: socket_id.into(),
+            node_id: node.id.clone(),
+            socket_id: socket_id.into(),
         })?;
     match values.get(&(source_node.to_owned(), source_socket.to_owned())) {
         Some(GraphValue::Image(image)) => Ok(image.clone()),
         _ => Err(GraphRenderError::ValueTypeMismatch {
-            node_id: node.id.clone(), socket_id: socket_id.into(),
+            node_id: node.id.clone(),
+            socket_id: socket_id.into(),
         }),
     }
 }
@@ -307,13 +371,15 @@ fn optional_mask_input(
     incoming: &HashMap<(&str, &str), (&str, &str)>,
     values: &HashMap<(String, String), GraphValue>,
 ) -> Result<Option<RgbaImage>, GraphRenderError> {
-    let Some((source_node, source_socket)) = incoming.get(&(node.id.as_str(), socket_id)).copied() else {
+    let Some((source_node, source_socket)) = incoming.get(&(node.id.as_str(), socket_id)).copied()
+    else {
         return Ok(None);
     };
     match values.get(&(source_node.to_owned(), source_socket.to_owned())) {
         Some(GraphValue::Mask(mask)) => Ok(Some(mask.clone())),
         _ => Err(GraphRenderError::ValueTypeMismatch {
-            node_id: node.id.clone(), socket_id: socket_id.into(),
+            node_id: node.id.clone(),
+            socket_id: socket_id.into(),
         }),
     }
 }
@@ -321,37 +387,73 @@ fn optional_mask_input(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kyrocut_core::{
-        GraphConnection, GraphEndpoint, GraphNode, GraphSocket, SocketType,
-    };
+    use kyrocut_core::{GraphConnection, GraphEndpoint, GraphNode, GraphSocket, SocketType};
     use std::collections::BTreeMap;
 
     fn socket(id: &str, socket_type: SocketType) -> GraphSocket {
-        GraphSocket { id: id.into(), name: id.into(), socket_type }
+        GraphSocket {
+            id: id.into(),
+            name: id.into(),
+            socket_type,
+        }
     }
 
-    fn node(id: &str, operation: NodeOperation, inputs: Vec<GraphSocket>, outputs: Vec<GraphSocket>) -> GraphNode {
+    fn node(
+        id: &str,
+        operation: NodeOperation,
+        inputs: Vec<GraphSocket>,
+        outputs: Vec<GraphSocket>,
+    ) -> GraphNode {
         GraphNode {
-            id: id.into(), label: id.into(), operation,
-            parameters: BTreeMap::new(), inputs, outputs,
+            id: id.into(),
+            label: id.into(),
+            operation,
+            parameters: BTreeMap::new(),
+            inputs,
+            outputs,
         }
     }
 
     fn connect(id: &str, from: &str, output: &str, to: &str, input: &str) -> GraphConnection {
         GraphConnection {
             id: id.into(),
-            from: GraphEndpoint { node_id: from.into(), socket_id: output.into() },
-            to: GraphEndpoint { node_id: to.into(), socket_id: input.into() },
+            from: GraphEndpoint {
+                node_id: from.into(),
+                socket_id: output.into(),
+            },
+            to: GraphEndpoint {
+                node_id: to.into(),
+                socket_id: input.into(),
+            },
         }
     }
 
     #[test]
     fn executes_source_grade_output_pipeline() {
-        let mut source = node("source", NodeOperation::MediaSource, vec![], vec![socket("image", SocketType::Image)]);
-        source.parameters.insert("mediaId".into(), Value::String("shot-1".into()));
-        let mut grade = node("grade", NodeOperation::ColorGrade, vec![socket("image", SocketType::Image)], vec![socket("image", SocketType::Image)]);
-        grade.parameters.insert("exposureStops".into(), Value::from(1.0));
-        let output = node("output", NodeOperation::Output, vec![socket("image", SocketType::Image)], vec![]);
+        let mut source = node(
+            "source",
+            NodeOperation::MediaSource,
+            vec![],
+            vec![socket("image", SocketType::Image)],
+        );
+        source
+            .parameters
+            .insert("mediaId".into(), Value::String("shot-1".into()));
+        let mut grade = node(
+            "grade",
+            NodeOperation::ColorGrade,
+            vec![socket("image", SocketType::Image)],
+            vec![socket("image", SocketType::Image)],
+        );
+        grade
+            .parameters
+            .insert("exposureStops".into(), Value::from(1.0));
+        let output = node(
+            "output",
+            NodeOperation::Output,
+            vec![socket("image", SocketType::Image)],
+            vec![],
+        );
         let graph = CompositingGraph {
             id: "test-graph".into(),
             nodes: vec![source, grade, output],
@@ -370,11 +472,24 @@ mod tests {
 
     #[test]
     fn reports_missing_source_media() {
-        let mut source = node("source", NodeOperation::MediaSource, vec![], vec![socket("image", SocketType::Image)]);
-        source.parameters.insert("mediaId".into(), Value::String("missing".into()));
-        let output = node("output", NodeOperation::Output, vec![socket("image", SocketType::Image)], vec![]);
+        let mut source = node(
+            "source",
+            NodeOperation::MediaSource,
+            vec![],
+            vec![socket("image", SocketType::Image)],
+        );
+        source
+            .parameters
+            .insert("mediaId".into(), Value::String("missing".into()));
+        let output = node(
+            "output",
+            NodeOperation::Output,
+            vec![socket("image", SocketType::Image)],
+            vec![],
+        );
         let graph = CompositingGraph {
-            id: "missing-source".into(), nodes: vec![source, output],
+            id: "missing-source".into(),
+            nodes: vec![source, output],
             connections: vec![connect("c1", "source", "image", "output", "image")],
         };
         assert_eq!(
@@ -385,15 +500,34 @@ mod tests {
 
     #[test]
     fn executes_chroma_key_operation() {
-        let mut source = node("source", NodeOperation::MediaSource, vec![], vec![socket("image", SocketType::Image)]);
-        source.parameters.insert("mediaId".into(), Value::String("greenscreen".into()));
-        let mut key = node("key", NodeOperation::ChromaKey, vec![socket("image", SocketType::Image)], vec![socket("image", SocketType::Image)]);
-        key.parameters.insert("keyRgb".into(), serde_json::json!([0, 255, 0]));
+        let mut source = node(
+            "source",
+            NodeOperation::MediaSource,
+            vec![],
+            vec![socket("image", SocketType::Image)],
+        );
+        source
+            .parameters
+            .insert("mediaId".into(), Value::String("greenscreen".into()));
+        let mut key = node(
+            "key",
+            NodeOperation::ChromaKey,
+            vec![socket("image", SocketType::Image)],
+            vec![socket("image", SocketType::Image)],
+        );
+        key.parameters
+            .insert("keyRgb".into(), serde_json::json!([0, 255, 0]));
         key.parameters.insert("threshold".into(), Value::from(0.05));
         key.parameters.insert("softness".into(), Value::from(0.1));
-        let output = node("output", NodeOperation::Output, vec![socket("image", SocketType::Image)], vec![]);
+        let output = node(
+            "output",
+            NodeOperation::Output,
+            vec![socket("image", SocketType::Image)],
+            vec![],
+        );
         let graph = CompositingGraph {
-            id: "key-graph".into(), nodes: vec![source, key, output],
+            id: "key-graph".into(),
+            nodes: vec![source, key, output],
             connections: vec![
                 connect("c1", "source", "image", "key", "image"),
                 connect("c2", "key", "image", "output", "image"),
