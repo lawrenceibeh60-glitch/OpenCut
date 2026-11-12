@@ -157,6 +157,7 @@ function Editor() {
     const accepted = Array.from(files).filter((file) => mediaKind(file))
     if (!accepted.length) { setNotice('Choose a video, audio or image file'); return }
     const additions: MediaAsset[] = []
+    let storageFailures = 0
     for (const file of accepted) {
       const kind = mediaKind(file)
       if (!kind) continue
@@ -181,10 +182,12 @@ function Editor() {
       const assetUrl = URL.createObjectURL(file)
       objectUrls.current.push(assetUrl)
       additions.push({ id, name: file.name, kind, url: assetUrl, size: file.size, duration: duration || 8, durationKnown: kind === 'image' || duration > 0, mimeType: file.type })
-      if (!stored) setNotice('Media imported for this session, but browser storage could not retain it. Keep the original file safe.')
+      if (!stored) storageFailures += 1
     }
     setAssets((current) => [...current, ...additions])
-    setNotice(`Imported ${additions.length} media item${additions.length === 1 ? '' : 's'}${additions.length ? ' and saved available files to browser storage' : ''}`)
+    setNotice(storageFailures
+      ? `Imported ${additions.length} media item(s), but browser storage could not retain ${storageFailures} file(s). Keep those originals safe.`
+      : `Imported ${additions.length} media item(s) and saved them to browser storage.`)
   }, [])
 
   const addAssetToTimeline = (asset: MediaAsset) => {
