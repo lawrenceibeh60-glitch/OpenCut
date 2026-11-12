@@ -12,3 +12,5 @@ path = "src/main.rs"
 [dependencies]
 gpui = { workspace = true }
 kyrocut-core = { workspace = true }
+kyrocut-render = { workspace = true }
+kyrocut-audio = { workspace = true }
