@@ -53,6 +53,33 @@ describe('KYROCUT X1 project manifest', () => {
     expect(parsed.tracks[0].clips[0].enabled).toBe(false)
   })
 
+
+  it('round-trips bounded non-destructive clip effects', () => {
+    const withEffects = {
+      ...validProject,
+      tracks: [{
+        ...validProject.tracks[0],
+        clips: [{
+          ...validProject.tracks[0].clips[0],
+          effects: { brightness: 125, contrast: 90, saturation: 140, blur: 2.5, grayscale: 0, sepia: 15, hueRotate: 210, opacity: 80 },
+        }],
+      }],
+    }
+    const parsed = parseProjectManifest(JSON.stringify(withEffects))
+    expect(parsed.tracks[0].clips[0].effects).toEqual(withEffects.tracks[0].clips[0].effects)
+  })
+
+  it('rejects out-of-range clip effect values', () => {
+    const invalid = {
+      ...validProject,
+      tracks: [{
+        ...validProject.tracks[0],
+        clips: [{ ...validProject.tracks[0].clips[0], effects: { brightness: 250 } }],
+      }],
+    }
+    expect(() => parseProjectManifest(JSON.stringify(invalid))).toThrow('Effect brightness')
+  })
+
   it('rejects unsupported format versions', () => {
     expect(() => parseProjectManifest(JSON.stringify({ ...validProject, version: 2 }))).toThrow('Unsupported')
   })
