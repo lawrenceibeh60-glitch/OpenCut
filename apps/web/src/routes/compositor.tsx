@@ -37,7 +37,7 @@ const baseLayout: Layout = {'source-1':{x:50,y:110},'transform-1':{x:350,y:110},
 const ops: Operation[] = ['media_source','transform2d','color_grade','chroma_key','mask','blend','merge','output']
 
 function validate(graph: Graph): string[] {
- const errors:string[]=[]; const ids=new Set<string>(); const nodes=new Map(graph.nodes.map(n=>[n.id,n])); const occupied=new Set<string>(); const edges=new Map<string,string[]>()
+ const errors:string[]=[]; const ids=new Set<string>(); const nodes=new Map<string,Node>(graph.nodes.map(n=>[n.id,n] as const)); const occupied=new Set<string>(); const edges=new Map<string,string[]>()
  if(!graph.id.trim()) errors.push('Composition ID is empty.')
  for(const n of graph.nodes){if(!n.id.trim()||!n.label.trim())errors.push('Every node needs an ID and label.');if(ids.has(n.id))errors.push('Duplicate node ID: '+n.id);ids.add(n.id);for(const group of [n.inputs,n.outputs]){const s=new Set<string>();for(const p of group){if(s.has(p.id))errors.push('Duplicate socket '+p.id);s.add(p.id)}}}
  if(!graph.nodes.some(n=>n.operation==='output'))errors.push('Add an Output node.')
