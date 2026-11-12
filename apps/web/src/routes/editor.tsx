@@ -240,6 +240,7 @@ function Editor() {
   }
   const togglePlayback = () => {
     if (!selectedClip || !selectedAsset) { setNotice('Select a timeline clip to preview it'); return }
+    if (!selectedClip.enabled) { setNotice('This clip is disabled. Enable it in the inspector before previewing.'); return }
     if (selectedAsset.kind === 'video' && videoRef.current) {
       if (playing) videoRef.current.pause()
       else void videoRef.current.play()
@@ -332,9 +333,9 @@ function Editor() {
           <div className="kx-preview-panel">
             <div className="kx-panel-title"><span>COMPOSITION VIEWER</span><span>1920 × 1080 <i>·</i> 30 FPS</span></div>
             <div className="kx-preview-stage">
-              {selectedAsset && !selectedAsset.url ? <div className="kx-preview-empty"><FolderOpen size={30} /><strong>MEDIA OFFLINE</strong><span>RELINK THE SOURCE FILE TO PREVIEW</span></div> : selectedAsset?.kind === 'video' ? <video ref={videoRef} src={selectedAsset.url} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onTimeUpdate={(event) => { if (selectedClip) setPlayhead(selectedClip.start + event.currentTarget.currentTime - selectedClip.sourceIn) }} controls={false} /> :
+              {selectedAsset && !selectedAsset.url ? <div className="kx-preview-empty"><FolderOpen size={30} /><strong>MEDIA OFFLINE</strong><span>RELINK THE SOURCE FILE TO PREVIEW</span></div> : selectedAsset?.kind === 'video' ? <video ref={videoRef} src={selectedAsset.url} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onTimeUpdate={(event) => { if (selectedClip) { const elapsed = event.currentTarget.currentTime - selectedClip.sourceIn; const clamped = Math.min(selectedClip.duration, Math.max(0, elapsed)); setPlayhead(selectedClip.start + clamped); if (elapsed >= selectedClip.duration) { event.currentTarget.pause(); setPlaying(false) } } }} controls={false} /> :
                 selectedAsset?.kind === 'image' ? <img src={selectedAsset.url} alt={selectedAsset.name} /> :
-                  selectedAsset?.kind === 'audio' ? <div className="kx-audio-preview"><AudioLines size={54} /><strong>{selectedAsset.name}</strong><span>Audio source preview</span><audio ref={audioRef} src={selectedAsset.url} controls onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onTimeUpdate={(event) => { if (selectedClip) setPlayhead(selectedClip.start + event.currentTarget.currentTime - selectedClip.sourceIn) }} /></div> :
+                  selectedAsset?.kind === 'audio' ? <div className="kx-audio-preview"><AudioLines size={54} /><strong>{selectedAsset.name}</strong><span>Audio source preview</span><audio ref={audioRef} src={selectedAsset.url} controls onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onTimeUpdate={(event) => { if (selectedClip) { const elapsed = event.currentTarget.currentTime - selectedClip.sourceIn; const clamped = Math.min(selectedClip.duration, Math.max(0, elapsed)); setPlayhead(selectedClip.start + clamped); if (elapsed >= selectedClip.duration) { event.currentTarget.pause(); setPlaying(false) } } }} /></div> :
                     <div className="kx-preview-empty"><div className="kx-preview-logo"><Clapperboard size={32} /></div><strong>KYROCUT X1</strong><span>CREATIVE VIEWPORT</span><small>Select a clip to preview your composition</small></div>}
             </div>
             <div className="kx-transport">
