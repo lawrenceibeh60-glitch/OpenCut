@@ -2,7 +2,7 @@
 
 **A cross-platform creative production system for video editing, compositing, motion graphics and 3D.**
 
-KYROCUT X1 is being developed as a shared creative platform with a browser editor and a native desktop application. Both editions are designed around one project model and a shared Rust core so projects and editing semantics can remain portable across platforms.
+KYROCUT X1 is being developed as a shared creative platform with a browser editor and a native desktop application. Both editions target one versioned project contract and a shared Rust core. The native package links the core; the browser currently validates the same contract in TypeScript. A WASM bridge is still needed before the browser executes the Rust edit engine directly.
 
 > This repository is an active foundation build. The web edition currently contains an early interactive editing workspace for importing local media, arranging clips on tracks, previewing selected source media, adjusting clip timing and saving a versioned project manifest. Native rendering, full timeline playback, effects processing, audio mixing, compositing and 3D are not yet complete. UI surfaces are not presented as implemented engine features.
 
