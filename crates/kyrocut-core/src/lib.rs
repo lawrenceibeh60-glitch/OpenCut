@@ -384,6 +384,36 @@ mod tests {
     }
 
     #[test]
+    fn project_document_applies_v1_defaults_for_early_files() {
+        let mut project = Project::new("Legacy", 1280, 720, FrameRate::FPS_30);
+        project.media.push(MediaReference {
+            id: "media-1".into(), name: "legacy.mp4".into(), kind: MediaKind::Video,
+            size_bytes: 100, mime_type: "video/mp4".into(),
+            locator: "media/legacy.mp4".into(), duration_frames: Some(100),
+        });
+        project.tracks.push(Track {
+            id: "video-1".into(), name: "V1".into(), kind: TrackKind::Video,
+            muted: false, locked: false,
+            clips: vec![Clip {
+                id: "clip-1".into(), media_id: "media-1".into(),
+                timeline_start: Frame(0), source_in: Frame(0),
+                duration_frames: 30, enabled: true,
+            }],
+        });
+        let document = project.to_document(Frame(0)).unwrap();
+        let mut value: serde_json::Value = serde_json::from_str(&document.to_json().unwrap()).unwrap();
+        let root = value.as_object_mut().unwrap();
+        root.remove("id");
+        root.remove("application");
+        value["tracks"][0]["clips"][0].as_object_mut().unwrap().remove("enabled");
+        let legacy_json = serde_json::to_string(&value).unwrap();
+        let legacy = ProjectDocument::from_json(&legacy_json).unwrap();
+        assert_eq!(legacy.id, "project-1");
+        assert_eq!(legacy.application, "KYROCUT X1");
+        assert!(legacy.into_project().unwrap().tracks[0].clips[0].enabled);
+    }
+
+    #[test]
     fn project_document_rejects_unsupported_version() {
         let project = Project::new("Version", 1920, 1080, FrameRate::FPS_30);
         let mut document = project.to_document(Frame(0)).unwrap();
