@@ -73,7 +73,7 @@ export async function encodeProjectArchive(
     write32(localView, 22, bytes.length)
     write16(localView, 26, nameBytes.length)
     local.set(nameBytes, 30)
-    output.push(local, bytes)
+    output.push(local, new Uint8Array(bytes).buffer as ArrayBuffer)
     const directory = new Uint8Array(46 + nameBytes.length)
     const directoryView = new DataView(directory.buffer)
     write32(directoryView, 0, ZIP_CENTRAL)
