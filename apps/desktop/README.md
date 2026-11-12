@@ -3,7 +3,7 @@
 Built with [GPUI](https://www.gpui.rs).
 
 > [!WARNING]
-> Foundation stage. The GPUI shell and editor panel layout are present, and the native package depends on the shared kyrocut-core crate. The GPUI panels are not yet wired to the core edit model; native media import, timeline interaction, playback and rendering are not implemented yet.
+> Foundation stage. The GPUI shell and editor panel layout are present, and the native package depends on the shared kyrocut-core, kyrocut-render and kyrocut-audio crates. The GPUI panels are not yet wired to the core edit model; native media import, timeline interaction, playback and rendering are not implemented yet.
 
 ## Running
 
