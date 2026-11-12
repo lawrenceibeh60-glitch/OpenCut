@@ -104,10 +104,11 @@ export function parseProjectManifest(source: string): ProjectManifest {
     if (kind !== 'video' && kind !== 'audio' && kind !== 'image') {
       throw new Error('Unsupported media kind for ' + id)
     }
+    const mediaKind = kind as ProjectMediaKind
     return {
       id,
       name: stringValue(value.name, 'Media name'),
-      kind,
+      kind: mediaKind,
       size: integerValue(value.size, 'Media size'),
       durationFrames: value.durationFrames === null || value.durationFrames === undefined ? null : integerValue(value.durationFrames, 'Media duration frames'),
       mimeType: typeof value.mimeType === 'string' ? value.mimeType : '',
@@ -126,6 +127,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
     if (kind !== 'video' && kind !== 'audio' && kind !== 'graphics' && kind !== 'adjustment') {
       throw new Error('Unsupported track kind for ' + id)
     }
+    const trackKind = kind as ProjectTrackKind
     if (!Array.isArray(value.clips)) throw new Error('Track clips must be an array')
     const clips = value.clips.map((clipValue, clipIndex) => {
       const clip = record(clipValue, 'Clip ' + clipIndex)
@@ -146,7 +148,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
     return {
       id,
       name: stringValue(value.name, 'Track name'),
-      kind,
+      kind: trackKind,
       muted: booleanValue(value.muted, 'Track muted state'),
       locked: booleanValue(value.locked, 'Track locked state'),
       clips,
