@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
+import { framesToSeconds, secondsToFrames, SEQUENCE_FRAME_RATE } from '../lib/timebase'
 import {
   AudioLines, ChevronDown, Clapperboard, Film, FolderOpen, ImagePlus, Layers3,
   Minus, Music2, Pause, Play, Plus, Save, Scissors, Settings2, Sparkles, Trash2,
@@ -112,8 +113,9 @@ function Editor() {
   }
   const splitSelectedClip = () => {
     if (!selectedClip) return
-    const splitOffset = Math.round((playhead - selectedClip.start) * 30) / 30
-    if (splitOffset < 1 / 30 || splitOffset > selectedClip.duration - 1 / 30) {
+    const oneFrame = framesToSeconds(1, SEQUENCE_FRAME_RATE)
+    const splitOffset = framesToSeconds(secondsToFrames(playhead - selectedClip.start, SEQUENCE_FRAME_RATE), SEQUENCE_FRAME_RATE)
+    if (splitOffset < oneFrame || splitOffset > selectedClip.duration - oneFrame) {
       setNotice('Move the playhead inside the selected clip to split it')
       return
     }
@@ -142,10 +144,10 @@ function Editor() {
   const saveProject = () => {
     const project = {
       format: 'kyrocut-project', version: 1, application: 'KYROCUT X1', name: projectName,
-      frameRate: { numerator: 30, denominator: 1 }, resolution: { width: 1920, height: 1080 },
-      media: assets.map(({ id, name, kind, size, duration, mimeType }) => ({ id, name, kind, size, durationFrames: Math.round(duration * 30), mimeType, locator: `media/${name}` })),
-      tracks: tracks.map((track) => ({ ...track, clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, timelineStartFrame: Math.round(clip.start * 30), sourceInFrame: Math.round(clip.sourceIn * 30), durationFrames: Math.max(1, Math.round(clip.duration * 30)) })) })),
-      playheadFrame: Math.round(playhead * 30),
+      frameRate: SEQUENCE_FRAME_RATE, resolution: { width: 1920, height: 1080 },
+      media: assets.map(({ id, name, kind, size, duration, mimeType }) => ({ id, name, kind, size, durationFrames: secondsToFrames(duration, SEQUENCE_FRAME_RATE), mimeType, locator: `media/${name}` })),
+      tracks: tracks.map((track) => ({ ...track, clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, timelineStartFrame: secondsToFrames(clip.start, SEQUENCE_FRAME_RATE), sourceInFrame: secondsToFrames(clip.sourceIn, SEQUENCE_FRAME_RATE), durationFrames: Math.max(1, secondsToFrames(clip.duration, SEQUENCE_FRAME_RATE)) })) })),
+      playheadFrame: secondsToFrames(playhead, SEQUENCE_FRAME_RATE),
     }
     const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -163,14 +165,14 @@ function Editor() {
         setNotice('This is not a supported KYROCUT X1 project file')
         return
       }
-      const fps = manifest.frameRate?.numerator && manifest.frameRate?.denominator ? manifest.frameRate.numerator / manifest.frameRate.denominator : 30
-      setAssets(manifest.media.map((asset) => ({ id: asset.id, name: asset.name, kind: asset.kind, url: '', size: asset.size ?? 0, duration: (asset.durationFrames ?? 0) / fps, mimeType: asset.mimeType ?? '', missing: true })))
+      const frameRate = manifest.frameRate?.numerator && manifest.frameRate?.denominator ? manifest.frameRate : SEQUENCE_FRAME_RATE
+      setAssets(manifest.media.map((asset) => ({ id: asset.id, name: asset.name, kind: asset.kind, url: '', size: asset.size ?? 0, duration: framesToSeconds(asset.durationFrames ?? 0, frameRate), mimeType: asset.mimeType ?? '', missing: true })))
       setTracks(manifest.tracks.map((track) => ({
         id: track.id, name: track.name, kind: track.kind, muted: Boolean(track.muted), locked: Boolean(track.locked),
-        clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, start: clip.timelineStartFrame / fps, sourceIn: clip.sourceInFrame / fps, duration: clip.durationFrames / fps })),
+        clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, start: framesToSeconds(clip.timelineStartFrame, frameRate), sourceIn: framesToSeconds(clip.sourceInFrame, frameRate), duration: framesToSeconds(clip.durationFrames, frameRate) })),
       })))
       setProjectName(manifest.name || file.name.replace('.kcx1', ''))
-      setPlayhead((manifest.playheadFrame ?? 0) / fps)
+      setPlayhead(framesToSeconds(manifest.playheadFrame ?? 0, frameRate))
       setSelectedClipId(null)
       setPlaying(false)
       setNotice('Opened ' + file.name + '. Relink the ' + manifest.media.length + ' source media item(s) to preview them.')
