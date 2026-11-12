@@ -42,6 +42,17 @@ describe('KYROCUT X1 project manifest', () => {
     expect(parsed.media[0].durationFrames).toBe(300)
   })
 
+  it('preserves disabled clips and accepts unknown media duration from native projects', () => {
+    const nativeDocument = {
+      ...validProject,
+      media: [{ ...validProject.media[0], durationFrames: null }],
+      tracks: [{ ...validProject.tracks[0], clips: [{ ...validProject.tracks[0].clips[0], enabled: false }] }],
+    }
+    const parsed = parseProjectManifest(JSON.stringify(nativeDocument))
+    expect(parsed.media[0].durationFrames).toBe(0)
+    expect(parsed.tracks[0].clips[0].enabled).toBe(false)
+  })
+
   it('rejects unsupported format versions', () => {
     expect(() => parseProjectManifest(JSON.stringify({ ...validProject, version: 2 }))).toThrow('Unsupported')
   })
