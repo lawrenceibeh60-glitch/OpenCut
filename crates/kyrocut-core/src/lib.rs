@@ -331,6 +331,7 @@ pub enum ProjectError {
     EmptyClip,
     UnknownMedia(String),
     UnknownClip(String),
+    UnknownTrack(String),
     ClipExceedsMedia(String),
     DuplicateIdentifier(String),
 }
@@ -346,6 +347,7 @@ impl fmt::Display for ProjectError {
             Self::EmptyClip => write!(f, "clip duration must be at least one frame"),
             Self::UnknownMedia(id) => write!(f, "clip references unknown media: {id}"),
             Self::UnknownClip(id) => write!(f, "unknown clip: {id}"),
+            Self::UnknownTrack(id) => write!(f, "unknown track: {id}"),
             Self::ClipExceedsMedia(id) => write!(f, "clip source range exceeds media duration: {id}"),
             Self::DuplicateIdentifier(id) => write!(f, "duplicate project identifier: {id}"),
         }
