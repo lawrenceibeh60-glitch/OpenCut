@@ -178,12 +178,14 @@ function Editor() {
     if (selectedAsset.kind === 'video' && videoRef.current) {
       if (playing) videoRef.current.pause()
       else void videoRef.current.play()
-    } else if (selectedAsset.kind === 'audio' && audioRef.current) {
+      return
+    }
+    if (selectedAsset.kind === 'audio' && audioRef.current) {
       if (playing) audioRef.current.pause()
       else void audioRef.current.play()
+      return
     }
-    if (selectedAsset.kind === 'image') { setNotice('Still image selected. Add it to a composition or move the playhead.'); return }
-    setPlaying((value) => !value)
+    setNotice('Still image selected. Add it to a composition or move the playhead.')
   }
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => { event.preventDefault(); void addFiles(event.dataTransfer.files) }
 
