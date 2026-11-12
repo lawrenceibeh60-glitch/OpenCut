@@ -19,13 +19,29 @@ use crate::{
 pub enum GraphRenderError {
     InvalidGraph(GraphError),
     MissingSource(String),
-    MissingParameter { node_id: String, parameter: String },
-    InvalidParameter { node_id: String, parameter: String },
-    MissingInput { node_id: String, socket_id: String },
+    MissingParameter {
+        node_id: String,
+        parameter: String,
+    },
+    InvalidParameter {
+        node_id: String,
+        parameter: String,
+    },
+    MissingInput {
+        node_id: String,
+        socket_id: String,
+    },
     MissingOutput,
-    ValueTypeMismatch { node_id: String, socket_id: String },
+    ValueTypeMismatch {
+        node_id: String,
+        socket_id: String,
+    },
     ImageDimensionsMismatch,
-    InvalidAnimation { node_id: String, property: String, message: String },
+    InvalidAnimation {
+        node_id: String,
+        property: String,
+        message: String,
+    },
     Render(RenderError),
 }
 
@@ -59,7 +75,14 @@ impl fmt::Display for GraphRenderError {
                     "blend inputs and optional mask must have matching dimensions"
                 )
             }
-            Self::InvalidAnimation { node_id, property, message } => write!(f, "node {node_id} has invalid animation for {property}: {message}"),
+            Self::InvalidAnimation {
+                node_id,
+                property,
+                message,
+            } => write!(
+                f,
+                "node {node_id} has invalid animation for {property}: {message}"
+            ),
             Self::Render(error) => write!(f, "render operation failed: {error}"),
         }
     }
@@ -92,24 +115,29 @@ pub fn render_compositing_graph_at_frame(
         let Some(animation) = node.parameters.get("animation").cloned() else {
             continue;
         };
-        let curves = animation.as_object().ok_or_else(|| GraphRenderError::InvalidAnimation {
-            node_id: node.id.clone(),
-            property: "animation".into(),
-            message: "expected an object keyed by animated property".into(),
-        })?;
+        let curves = animation
+            .as_object()
+            .ok_or_else(|| GraphRenderError::InvalidAnimation {
+                node_id: node.id.clone(),
+                property: "animation".into(),
+                message: "expected an object keyed by animated property".into(),
+            })?;
         for (property, curve_value) in curves {
-            let curve: ScalarCurve = serde_json::from_value(curve_value.clone()).map_err(|error| {
-                GraphRenderError::InvalidAnimation {
+            let curve: ScalarCurve =
+                serde_json::from_value(curve_value.clone()).map_err(|error| {
+                    GraphRenderError::InvalidAnimation {
+                        node_id: node.id.clone(),
+                        property: property.clone(),
+                        message: error.to_string(),
+                    }
+                })?;
+            curve
+                .validate()
+                .map_err(|error| GraphRenderError::InvalidAnimation {
                     node_id: node.id.clone(),
                     property: property.clone(),
                     message: error.to_string(),
-                }
-            })?;
-            curve.validate().map_err(|error| GraphRenderError::InvalidAnimation {
-                node_id: node.id.clone(),
-                property: property.clone(),
-                message: error.to_string(),
-            })?;
+                })?;
             if let Some(value) = curve.evaluate(Frame(frame)) {
                 node.parameters.insert(property.clone(), Value::from(value));
             }
@@ -519,7 +547,9 @@ mod tests {
             vec![],
             vec![socket("image", SocketType::Image)],
         );
-        source.parameters.insert("mediaId".into(), Value::String("shot".into()));
+        source
+            .parameters
+            .insert("mediaId".into(), Value::String("shot".into()));
         let mut grade = node(
             "grade",
             NodeOperation::ColorGrade,
