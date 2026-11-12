@@ -3572,6 +3572,10 @@ name = "kyrocut-core"
 version = "0.1.0"
 
 [[package]]
+name = "kyrocut-render"
+version = "0.1.0"
+
+[[package]]
 name = "kyrocut-x1-desktop"
 version = "0.1.0"
 dependencies = [
