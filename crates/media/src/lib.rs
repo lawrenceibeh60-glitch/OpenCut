@@ -691,10 +691,11 @@ mod timeline_audio_tests {
         assert_eq!(mixed.channels(), 2);
         assert_eq!(mixed.frame_count(), 3_200);
         assert_eq!(&mixed.samples()[..3_200], &vec![0.0; 3_200]);
+        let expected_center_pan = 0.5 * std::f32::consts::FRAC_1_SQRT_2;
         assert!(
             mixed.samples()[3_200..]
                 .iter()
-                .all(|sample| (*sample - 0.5).abs() < 1e-6)
+                .all(|sample| (*sample - expected_center_pan).abs() < 1e-6)
         );
     }
 
