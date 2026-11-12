@@ -1,7 +1,7 @@
 import type { RationalFrameRate } from './timebase'
 
 export type ProjectMediaKind = 'video' | 'audio' | 'image'
-export type ProjectTrackKind = 'video' | 'audio' | 'graphics'
+export type ProjectTrackKind = 'video' | 'audio' | 'graphics' | 'adjustment'
 
 export type ProjectManifest = {
   format: 'kyrocut-project'
@@ -114,7 +114,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
       name: stringValue(value.name, 'Media name'),
       kind,
       size: finiteValue(value.size, 'Media size'),
-      durationFrames: integerValue(value.durationFrames, 'Media duration frames'),
+      durationFrames: value.durationFrames === null || value.durationFrames === undefined ? 0 : integerValue(value.durationFrames, 'Media duration frames'),
       mimeType: typeof value.mimeType === 'string' ? value.mimeType : '',
       locator: stringValue(value.locator, 'Media locator'),
     }
@@ -128,7 +128,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
     if (trackIds.has(id)) throw new Error('Duplicate track ID: ' + id)
     trackIds.add(id)
     const kind = value.kind
-    if (kind !== 'video' && kind !== 'audio' && kind !== 'graphics') {
+    if (kind !== 'video' && kind !== 'audio' && kind !== 'graphics' && kind !== 'adjustment') {
       throw new Error('Unsupported track kind for ' + id)
     }
     if (!Array.isArray(value.clips)) throw new Error('Track clips must be an array')
