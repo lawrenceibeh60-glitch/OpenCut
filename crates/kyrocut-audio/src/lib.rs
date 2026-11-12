@@ -88,9 +88,11 @@ impl PcmBuffer {
         if self.samples.is_empty() {
             return 0.0;
         }
-        let mean_square = self.samples.iter().map(|sample| sample * sample).sum::<f32>()
-            / self.samples.len() as f32;
-        mean_square.sqrt()
+        let mean_square = self.samples.iter().map(|sample| {
+            let sample = *sample as f64;
+            sample * sample
+        }).sum::<f64>() / self.samples.len() as f64;
+        mean_square.sqrt() as f32
     }
 
     pub fn apply_gain_db(&mut self, decibels: f32) -> Result<(), AudioError> {
