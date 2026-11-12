@@ -49,7 +49,7 @@ describe('KYROCUT X1 project manifest', () => {
       tracks: [{ ...validProject.tracks[0], clips: [{ ...validProject.tracks[0].clips[0], enabled: false }] }],
     }
     const parsed = parseProjectManifest(JSON.stringify(nativeDocument))
-    expect(parsed.media[0].durationFrames).toBe(0)
+    expect(parsed.media[0].durationFrames).toBeNull()
     expect(parsed.tracks[0].clips[0].enabled).toBe(false)
   })
 
