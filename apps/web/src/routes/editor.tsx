@@ -37,6 +37,7 @@ function Editor() {
   const [playing, setPlaying] = useState(false)
   const [activeTab, setActiveTab] = useState<'media' | 'effects' | 'text'>('media')
   const [projectName, setProjectName] = useState('Untitled project')
+  const [projectId, setProjectId] = useState(createId())
   const [notice, setNotice] = useState('Import media to begin editing')
   const fileInput = useRef<HTMLInputElement>(null)
   const projectInput = useRef<HTMLInputElement>(null)
@@ -159,7 +160,7 @@ function Editor() {
   }
   const saveProject = () => {
     const project = {
-      format: 'kyrocut-project', version: 1, application: 'KYROCUT X1', name: projectName,
+      format: 'kyrocut-project', version: 1, application: 'KYROCUT X1', id: projectId, name: projectName,
       frameRate: SEQUENCE_FRAME_RATE, resolution: { width: 1920, height: 1080 },
       media: assets.map(({ id, name, kind, size, duration, mimeType }) => ({ id, name, kind, size, durationFrames: secondsToFrames(duration, SEQUENCE_FRAME_RATE), mimeType, locator: `media/${name}` })),
       tracks: tracks.map((track) => ({ ...track, clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, timelineStartFrame: secondsToFrames(clip.start, SEQUENCE_FRAME_RATE), sourceInFrame: secondsToFrames(clip.sourceIn, SEQUENCE_FRAME_RATE), durationFrames: Math.max(1, secondsToFrames(clip.duration, SEQUENCE_FRAME_RATE)), enabled: clip.enabled })) })),
@@ -187,6 +188,7 @@ function Editor() {
         id: track.id, name: track.name, kind: track.kind, muted: Boolean(track.muted), locked: Boolean(track.locked),
         clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, start: framesToSeconds(clip.timelineStartFrame, frameRate), sourceIn: framesToSeconds(clip.sourceInFrame, frameRate), duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled })),
       })))
+      setProjectId(manifest.id ?? createId())
       setProjectName(manifest.name || file.name.replace('.kcx1', ''))
       setPlayhead(framesToSeconds(manifest.playheadFrame ?? 0, frameRate))
       setSelectedClipId(null)
