@@ -110,6 +110,24 @@ function Editor() {
       } : clip),
     })))
   }
+  const splitSelectedClip = () => {
+    if (!selectedClip) return
+    const splitOffset = Math.round((playhead - selectedClip.start) * 30) / 30
+    if (splitOffset < 1 / 30 || splitOffset > selectedClip.duration - 1 / 30) {
+      setNotice('Move the playhead inside the selected clip to split it')
+      return
+    }
+    const rightClip: TimelineClip = {
+      id: createId(), mediaId: selectedClip.mediaId, start: selectedClip.start + splitOffset,
+      sourceIn: selectedClip.sourceIn + splitOffset, duration: selectedClip.duration - splitOffset,
+    }
+    setTracks((current) => current.map((track) => track.id === selectedClip.trackId
+      ? { ...track, clips: track.clips.flatMap((clip) => clip.id === selectedClip.id
+        ? [{ ...clip, duration: splitOffset }, rightClip] : [clip]) }
+      : track))
+    setSelectedClipId(rightClip.id)
+    setNotice('Clip split at the playhead')
+  }
   const removeSelectedClip = () => {
     if (!selectedClipId) return
     setTracks((current) => current.map((track) => ({ ...track, clips: track.clips.filter((clip) => clip.id !== selectedClipId) })))
@@ -294,7 +312,7 @@ function Editor() {
             <label className="kx-field"><span>Timeline start (s)</span><input type="number" min="0" step="0.01" value={selectedClip.start.toFixed(2)} onChange={(event) => updateSelectedClip({ start: Number(event.target.value) })} /></label>
             <label className="kx-field"><span>Source in (s)</span><input type="number" min="0" step="0.01" value={selectedClip.sourceIn.toFixed(2)} onChange={(event) => updateSelectedClip({ sourceIn: Number(event.target.value) })} /></label>
             <label className="kx-field"><span>Duration (s)</span><input type="number" min="0.25" step="0.01" value={selectedClip.duration.toFixed(2)} onChange={(event) => updateSelectedClip({ duration: Number(event.target.value) })} /></label>
-            <div className="kx-trim-actions"><button onClick={() => updateSelectedClip({ sourceIn: selectedClip.sourceIn + 0.5, duration: selectedClip.duration - 0.5 })}><Minus size={13} /> Trim start</button><button onClick={() => updateSelectedClip({ duration: selectedClip.duration - 0.5 })}><Minus size={13} /> Trim end</button></div>
+            <div className="kx-trim-actions"><button onClick={splitSelectedClip}><Scissors size={13} /> Split</button><button onClick={() => updateSelectedClip({ sourceIn: selectedClip.sourceIn + 0.5, duration: selectedClip.duration - 0.5 })}><Minus size={13} /> Trim start</button><button onClick={() => updateSelectedClip({ duration: selectedClip.duration - 0.5 })}><Minus size={13} /> Trim end</button></div>
             <button className="kx-delete-clip" onClick={removeSelectedClip}><Trash2 size={14} /> Remove clip</button>
             <div className="kx-section-label">SOURCE DETAILS</div>
             <div className="kx-detail-row"><span>File size</span><strong>{(selectedAsset.size / (1024 * 1024)).toFixed(2)} MB</strong></div>
