@@ -105,7 +105,7 @@ function Editor() {
   const updateSelectedClip = (patch: Partial<TimelineClip>) => {
     if (!selectedClipId || !selectedClip) return
     const asset = assets.find((item) => item.id === selectedClip.mediaId)
-    const oneFrame = framesToSeconds(1, SEQUENCE_FRAME_RATE)
+    const oneFrame = framesToSeconds(1, projectFrameRate)
     const requestedSourceIn = Math.max(0, patch.sourceIn ?? selectedClip.sourceIn)
     const sourceIn = asset && asset.durationKnown
       ? Math.min(requestedSourceIn, Math.max(0, asset.duration - oneFrame))
@@ -157,7 +157,7 @@ function Editor() {
       setNotice('Move the playhead inside the selected clip to split it')
       return
     }
-    const oneFrame = framesToSeconds(1, SEQUENCE_FRAME_RATE)
+    const oneFrame = framesToSeconds(1, projectFrameRate)
     const splitOffset = framesToSeconds(secondsToFrames(relativePlayhead, projectFrameRate), projectFrameRate)
     if (splitOffset < oneFrame || splitOffset > selectedClip.duration - oneFrame) {
       setNotice('Move the playhead inside the selected clip to split it')
