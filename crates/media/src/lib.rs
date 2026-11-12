@@ -89,7 +89,7 @@ pub fn probe(path: impl AsRef<Path>) -> Result<MediaInfo, MediaError> {
         .map_err(|error| MediaError::Open(error.to_string()))?;
 
     let duration = input.duration();
-    let duration_seconds = (duration > 0).then_some(duration as f64 / f64::from(ffmpeg::ffi::AV_TIME_BASE));
+    let duration_seconds = (duration > 0).then_some(duration as f64 / 1_000_000.0);
 
     let video = input.streams().best(ffmpeg::media::Type::Video).map(|stream| {
         let stream_index = stream.index();
@@ -316,7 +316,7 @@ pub fn decode_audio_f32_stereo(path: impl AsRef<Path>) -> Result<kyrocut_audio::
     };
     let mut resampler = decoder.resampler(
         ffmpeg::format::Sample::F32(ffmpeg::format::sample::Type::Packed),
-        ffmpeg::ChannelLayout::STEREO,
+        ffmpeg::channel_layout::ChannelLayout::STEREO,
         48_000,
     ).map_err(|error| MediaError::Audio(error.to_string()))?;
 
@@ -370,10 +370,11 @@ pub fn render_timeline_video_frame(
         }
         let media = project.media.iter().find(|media| media.id == active.clip.media_id)
             .ok_or_else(|| MediaError::Project(format!("missing media {}", active.clip.media_id)))?;
-        if media.kind != kyrocut_core::MediaKind::Video { continue; }
+        if !matches!(media.kind, kyrocut_core::MediaKind::Video | kyrocut_core::MediaKind::Image) { continue; }
+        let source_frame = if media.kind == kyrocut_core::MediaKind::Image { 0 } else { active.source_frame.0 as usize };
         let path = media_paths.get(&media.id)
             .ok_or_else(|| MediaError::Open(format!("no linked file for media {}", media.id)))?;
-        let frame = decode_video_frame_at(path, active.source_frame.0 as usize)?;
+        let frame = decode_video_frame_at(path, source_frame)?;
         let image = kyrocut_render::RgbaImage::new(frame.width, frame.height, frame.rgba)
             .map_err(|error| MediaError::Render(error.to_string()))?;
         images.push(image);

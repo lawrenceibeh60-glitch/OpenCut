@@ -24,5 +24,8 @@ The setup manifest and build recipe are the source of truth for the native libra
 
 - `probe(path)` reads container duration and the best video/audio stream properties.
 - `decode_video_frames(path, max_frames)` decodes a bounded number of frames and returns owned RGBA8 buffers.
+- `decode_video_frame_at(path, index)` retrieves a frame by presentation order (currently sequential from the start, not yet optimized random access).
+- `decode_audio_f32_stereo(path)` decodes and resamples the best audio stream to 48 kHz stereo float PCM for `kyrocut-audio`.
+- `render_timeline_video_frame(project, frame, media_paths)` evaluates the shared Rust timeline, decodes active video/image sources, and composites them through `kyrocut-render`.
 
 The decoder currently performs sequential decode from the beginning of the file. Timestamp-based seeking, audio PCM extraction, asynchronous decode queues, proxy generation, and timeline scheduling are subsequent integration work. This crate is not yet the complete playback engine.
