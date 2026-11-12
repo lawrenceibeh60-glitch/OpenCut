@@ -74,7 +74,7 @@ The first useful end-to-end slice is:
 7. Reopen the project and relink source media.
 8. Render a deterministic sequence through the shared render path.
 
-The current web foundation implements the initial import, arrangement, source-preview and manifest-download portion. It does not yet implement a full timeline playback compositor, media relinking or final export.
+The current web foundation implements local import, arrangement, selected-source preview, manifest save/open and basic filename-based media relinking. It does not yet implement a full timeline playback compositor, portable media packaging or final export.
 
 ## Validation gates
 
