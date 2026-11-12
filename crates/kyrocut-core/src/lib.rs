@@ -6,8 +6,11 @@
 use std::collections::HashSet;
 use std::fmt;
 
+mod animation;
 mod commands;
 mod history;
+
+pub use animation::{CurveError, Interpolation, ScalarCurve, ScalarKeyframe};
 
 pub use commands::EditCommand;
 pub use history::ProjectHistory;
