@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 ffmpeg-next = { version = "8.0.0", default-features = false, features = ["codec", "format", "software-scaling", "software-resampling"] }
+serde_json = { workspace = true }
 
 kyrocut-audio = { workspace = true }
 kyrocut-core = { workspace = true }
