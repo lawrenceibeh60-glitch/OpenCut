@@ -381,15 +381,29 @@ mod tests {
         );
     }
 
-
     #[test]
     fn input_and_output_sockets_may_share_the_same_id() {
         let graph = CompositingGraph {
             id: "pass-through".into(),
             nodes: vec![
-                node("source", NodeOperation::MediaSource, vec![], vec![socket("image", SocketType::Image)]),
-                node("transform", NodeOperation::Transform2d, vec![socket("image", SocketType::Image)], vec![socket("image", SocketType::Image)]),
-                node("output", NodeOperation::Output, vec![socket("image", SocketType::Image)], vec![]),
+                node(
+                    "source",
+                    NodeOperation::MediaSource,
+                    vec![],
+                    vec![socket("image", SocketType::Image)],
+                ),
+                node(
+                    "transform",
+                    NodeOperation::Transform2d,
+                    vec![socket("image", SocketType::Image)],
+                    vec![socket("image", SocketType::Image)],
+                ),
+                node(
+                    "output",
+                    NodeOperation::Output,
+                    vec![socket("image", SocketType::Image)],
+                    vec![],
+                ),
             ],
             connections: vec![
                 connection("c1", "source", "image", "transform", "image"),
