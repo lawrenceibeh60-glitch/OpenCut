@@ -15,7 +15,7 @@ export const Route = createFileRoute('/editor')({ component: Editor })
 
 type MediaKind = 'video' | 'audio' | 'image'
 type MediaAsset = { id: string; name: string; kind: MediaKind; url: string; size: number; duration: number; mimeType: string; missing?: boolean }
-type TimelineClip = { id: string; mediaId: string; start: number; sourceIn: number; duration: number }
+type TimelineClip = { id: string; mediaId: string; start: number; sourceIn: number; duration: number; enabled: boolean }
 type TimelineTrack = { id: string; name: string; kind: 'video' | 'audio' | 'graphics' | 'adjustment'; clips: TimelineClip[]; muted: boolean; locked: boolean }
 
 const createId = () => globalThis.crypto?.randomUUID?.() ?? `kyro-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -93,7 +93,7 @@ function Editor() {
       target = { id, name: `${targetKind === 'audio' ? 'A' : 'V'}${tracks.filter((track) => track.kind === targetKind).length + 1}`, kind: targetKind, clips: [], muted: false, locked: false }
       setTracks((current) => [...current, target!])
     }
-    const clip: TimelineClip = { id: createId(), mediaId: asset.id, start: playhead, sourceIn: 0, duration: Math.max(framesToSeconds(1, SEQUENCE_FRAME_RATE), asset.duration) }
+    const clip: TimelineClip = { id: createId(), mediaId: asset.id, start: playhead, sourceIn: 0, duration: Math.max(framesToSeconds(1, SEQUENCE_FRAME_RATE), asset.duration), enabled: true }
     setTracks((current) => current.map((track) => track.id === target!.id ? { ...track, clips: [...track.clips, clip] } : track))
     setSelectedClipId(clip.id)
     setNotice(`Added ${asset.name} to ${target.name}`)
@@ -162,7 +162,7 @@ function Editor() {
       format: 'kyrocut-project', version: 1, application: 'KYROCUT X1', name: projectName,
       frameRate: SEQUENCE_FRAME_RATE, resolution: { width: 1920, height: 1080 },
       media: assets.map(({ id, name, kind, size, duration, mimeType }) => ({ id, name, kind, size, durationFrames: secondsToFrames(duration, SEQUENCE_FRAME_RATE), mimeType, locator: `media/${name}` })),
-      tracks: tracks.map((track) => ({ ...track, clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, timelineStartFrame: secondsToFrames(clip.start, SEQUENCE_FRAME_RATE), sourceInFrame: secondsToFrames(clip.sourceIn, SEQUENCE_FRAME_RATE), durationFrames: Math.max(1, secondsToFrames(clip.duration, SEQUENCE_FRAME_RATE)) })) })),
+      tracks: tracks.map((track) => ({ ...track, clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, timelineStartFrame: secondsToFrames(clip.start, SEQUENCE_FRAME_RATE), sourceInFrame: secondsToFrames(clip.sourceIn, SEQUENCE_FRAME_RATE), durationFrames: Math.max(1, secondsToFrames(clip.duration, SEQUENCE_FRAME_RATE)), enabled: clip.enabled })) })),
       playheadFrame: secondsToFrames(playhead, SEQUENCE_FRAME_RATE),
     }
     const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' })
@@ -185,7 +185,7 @@ function Editor() {
       setAssets(manifest.media.map((asset) => ({ id: asset.id, name: asset.name, kind: asset.kind, url: '', size: asset.size ?? 0, duration: framesToSeconds(asset.durationFrames ?? 0, frameRate), mimeType: asset.mimeType ?? '', missing: true })))
       setTracks(manifest.tracks.map((track) => ({
         id: track.id, name: track.name, kind: track.kind, muted: Boolean(track.muted), locked: Boolean(track.locked),
-        clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, start: framesToSeconds(clip.timelineStartFrame, frameRate), sourceIn: framesToSeconds(clip.sourceInFrame, frameRate), duration: framesToSeconds(clip.durationFrames, frameRate) })),
+        clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, start: framesToSeconds(clip.timelineStartFrame, frameRate), sourceIn: framesToSeconds(clip.sourceInFrame, frameRate), duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled })),
       })))
       setProjectName(manifest.name || file.name.replace('.kcx1', ''))
       setPlayhead(framesToSeconds(manifest.playheadFrame ?? 0, frameRate))
@@ -309,7 +309,7 @@ function Editor() {
                 <div className="kx-track-lane">
                   {track.clips.map((clip) => {
                     const asset = assets.find((item) => item.id === clip.mediaId)
-                    return <button key={clip.id} className={`kx-clip ${track.kind} ${selectedClipId === clip.id ? 'selected' : ''}`} style={{ left: `${clip.start * 12}px`, width: `${Math.max(48, clip.duration * 12)}px` }} onClick={() => { setSelectedClipId(clip.id); setPlayhead(clip.start) }} title={asset?.name ?? 'Missing media'}>
+                    return <button key={clip.id} className={`kx-clip ${track.kind} ${selectedClipId === clip.id ? 'selected' : ''} ${clip.enabled ? '' : 'disabled'}`} style={{ left: `${clip.start * 12}px`, width: `${Math.max(48, clip.duration * 12)}px` }} onClick={() => { setSelectedClipId(clip.id); setPlayhead(clip.start) }} title={asset?.name ?? 'Missing media'}>
                       <span className="kx-clip-wave">{track.kind === 'audio' ? '▂▅▃▇▂▆▃▅▂▇▃▅' : '▥ ▥ ▥ ▥ ▥ ▥'}</span><strong>{asset?.name ?? 'Offline media'}</strong>
                     </button>
                   })}
@@ -329,7 +329,8 @@ function Editor() {
             <div className="kx-section-label">TRANSFORM / TIMING</div>
             <label className="kx-field"><span>Timeline start (s)</span><input type="number" min="0" step="0.01" value={selectedClip.start.toFixed(2)} onChange={(event) => updateSelectedClip({ start: Number(event.target.value) })} /></label>
             <label className="kx-field"><span>Source in (s)</span><input type="number" min="0" step="0.01" value={selectedClip.sourceIn.toFixed(2)} onChange={(event) => updateSelectedClip({ sourceIn: Number(event.target.value) })} /></label>
-            <label className="kx-field"><span>Duration (s)</span><input type="number" min="0.25" step="0.01" value={selectedClip.duration.toFixed(2)} onChange={(event) => updateSelectedClip({ duration: Number(event.target.value) })} /></label>
+            <label className="kx-field"><span>Duration (s)</span><input type="number" min="0.03" step="0.01" value={selectedClip.duration.toFixed(2)} onChange={(event) => updateSelectedClip({ duration: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Clip enabled</span><input type="checkbox" checked={selectedClip.enabled} onChange={(event) => updateSelectedClip({ enabled: event.target.checked })} /></label>
             <div className="kx-trim-actions"><button onClick={splitSelectedClip}><Scissors size={13} /> Split</button><button onClick={() => updateSelectedClip({ sourceIn: selectedClip.sourceIn + 0.5, duration: selectedClip.duration - 0.5 })}><Minus size={13} /> Trim start</button><button onClick={() => updateSelectedClip({ duration: selectedClip.duration - 0.5 })}><Minus size={13} /> Trim end</button></div>
             <button className="kx-delete-clip" onClick={removeSelectedClip}><Trash2 size={14} /> Remove clip</button>
             <div className="kx-section-label">SOURCE DETAILS</div>
