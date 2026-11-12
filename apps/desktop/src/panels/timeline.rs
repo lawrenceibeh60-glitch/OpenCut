@@ -15,6 +15,6 @@ impl Render for Timeline {
             .justify_center()
             .bg(colors.card)
             .text_color(colors.card_foreground)
-            .child("TIMELINE / SHARED CORE")
+            .child("TIMELINE / FOUNDATION")
     }
 }
