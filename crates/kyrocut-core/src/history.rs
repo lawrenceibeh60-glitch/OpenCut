@@ -80,8 +80,8 @@ mod tests {
     fn project() -> Project {
         let mut project = Project::new("History test", 1280, 720, FrameRate::FPS_30);
         project.media.push(MediaReference {
-            id: "media-1".into(), name: "shot.mp4".into(),
-            locator: "media/shot.mp4".into(), duration_frames: Some(300),
+            id: "media-1".into(), name: "shot.mp4".into(), kind: crate::MediaKind::Video,
+            size_bytes: 1024, mime_type: "video/mp4".into(), locator: "media/shot.mp4".into(), duration_frames: Some(300),
         });
         project.tracks.push(Track {
             id: "track-1".into(), name: "V1".into(), kind: TrackKind::Video,
