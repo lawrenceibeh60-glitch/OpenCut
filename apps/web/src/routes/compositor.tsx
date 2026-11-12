@@ -15,7 +15,7 @@ type Layout = Record<string, { x: number; y: number }>
 const uid = () => 'kx-' + Date.now() + '-' + Math.random().toString(16).slice(2)
 const port = (id: string, socketType: SocketType): Socket => ({ id, name: id, socketType })
 const defs: Record<Operation, { label: string; inputs: Socket[]; outputs: Socket[]; parameters: Record<string, unknown> }> = {
- media_source:{label:'Media Source',inputs:[],outputs:[port('image','image')],parameters:{mediaId:''}},
+ media_source:{label:'Media Source',inputs:[],outputs:[port('image','image')],parameters:{mediaId:'',sourceFrame:0}},
  transform2d:{label:'Transform 2D',inputs:[port('image','image')],outputs:[port('image','image')],parameters:{positionX:0,positionY:0,scaleX:1,scaleY:1,rotationRadians:0,opacity:1}},
  color_grade:{label:'Color Grade',inputs:[port('image','image')],outputs:[port('image','image')],parameters:{exposureStops:0,contrast:0,saturation:1,gamma:1,brightness:0}},
  chroma_key:{label:'Chroma Key',inputs:[port('image','image')],outputs:[port('image','image')],parameters:{keyRgb:[0,255,0],threshold:0.12,softness:0.08}},
@@ -25,7 +25,7 @@ const defs: Record<Operation, { label: string; inputs: Socket[]; outputs: Socket
  output:{label:'Output',inputs:[port('image','image')],outputs:[],parameters:{}}
 }
 const base: Graph = {id:'composition-main',nodes:[
- {id:'source-1',label:'Footage Source',operation:'media_source',parameters:{mediaId:''},inputs:[],outputs:[port('image','image')]},
+ {id:'source-1',label:'Footage Source',operation:'media_source',parameters:{mediaId:'',sourceFrame:0},inputs:[],outputs:[port('image','image')]},
  {id:'transform-1',label:'Transform',operation:'transform2d',parameters:{positionX:0,positionY:0,scaleX:1,scaleY:1,rotationRadians:0,opacity:1},inputs:[port('image','image')],outputs:[port('image','image')]},
  {id:'grade-1',label:'Color Grade',operation:'color_grade',parameters:{exposureStops:0,contrast:0,saturation:1,gamma:1,brightness:0},inputs:[port('image','image')],outputs:[port('image','image')]},
  {id:'output-1',label:'Final Output',operation:'output',parameters:{},inputs:[port('image','image')],outputs:[]}],
