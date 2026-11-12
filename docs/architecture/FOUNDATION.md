@@ -17,7 +17,7 @@ Neither client owns a separate project format or editing model. Both consume the
 | apps/desktop | Native GPUI application |
 | apps/api | Cloudflare-compatible API surface |
 | crates/kyrocut-core | Platform-independent project and timeline domain |
-| crates/media | Existing FFmpeg setup assets; not yet a complete media engine |
+| crates/kyrocut-render | Deterministic CPU RGBA compositing and blend modes |\n| crates/media | Existing FFmpeg setup assets; not yet a complete media engine |
 
 ## Core design rules
 
@@ -46,7 +46,7 @@ Maps timeline frame positions to active clips, source frames, track state, trans
 
 ### Render graph
 
-Represents source nodes, transforms, masks, effects, compositing and output targets. GPU backends may include wgpu; CPU fallback is required for unsupported hardware and headless tests.
+Represents source nodes, transforms, masks, effects, compositing and output targets. The first CPU RGBA compositor now provides source-over compositing and Normal/Multiply/Screen/Add blend modes. It currently expects same-sized RGBA8 layers and operates on encoded channel values; transforms, masks, linear-light color management, GPU backends and video-frame integration remain future work.
 
 ### Audio graph
 
