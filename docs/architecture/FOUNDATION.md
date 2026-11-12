@@ -17,6 +17,7 @@ Neither client owns a separate project format. Both target the same versioned pr
 | apps/desktop | Native GPUI application |
 | apps/api | Cloudflare-compatible API surface |
 | crates/kyrocut-core | Platform-independent project and timeline domain |
+| crates/kyrocut-audio | Decoded PCM mixing and DSP primitives |
 | crates/kyrocut-render | Deterministic CPU RGBA compositing and blend modes |
 | crates/media | Existing FFmpeg setup assets; not yet a complete media engine |
 
@@ -55,7 +56,7 @@ The core currently evaluates frame-addressed scalar curves with Hold, Linear, Sm
 
 ### Audio graph
 
-Owns sample-accurate scheduling, mixing, gain automation, effects and output device integration.
+The first audio crate provides validated interleaved PCM buffers, sample-accurate mixing, decibel gain, fades, stereo pan, peak and RMS metering. Compressed decoding, timeline scheduling, automation, effects, limiting and output-device integration remain future work.
 
 ### Client adapters
 
