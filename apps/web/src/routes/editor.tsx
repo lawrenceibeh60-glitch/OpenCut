@@ -93,21 +93,31 @@ function Editor() {
       target = { id, name: `${targetKind === 'audio' ? 'A' : 'V'}${tracks.filter((track) => track.kind === targetKind).length + 1}`, kind: targetKind, clips: [], muted: false, locked: false }
       setTracks((current) => [...current, target!])
     }
-    const clip: TimelineClip = { id: createId(), mediaId: asset.id, start: playhead, sourceIn: 0, duration: Math.max(1, asset.duration) }
+    const clip: TimelineClip = { id: createId(), mediaId: asset.id, start: playhead, sourceIn: 0, duration: Math.max(framesToSeconds(1, SEQUENCE_FRAME_RATE), asset.duration) }
     setTracks((current) => current.map((track) => track.id === target!.id ? { ...track, clips: [...track.clips, clip] } : track))
     setSelectedClipId(clip.id)
     setNotice(`Added ${asset.name} to ${target.name}`)
   }
 
   const updateSelectedClip = (patch: Partial<TimelineClip>) => {
-    if (!selectedClipId) return
+    if (!selectedClipId || !selectedClip) return
+    const asset = assets.find((item) => item.id === selectedClip.mediaId)
+    const oneFrame = framesToSeconds(1, SEQUENCE_FRAME_RATE)
+    const requestedSourceIn = Math.max(0, patch.sourceIn ?? selectedClip.sourceIn)
+    const sourceIn = asset
+      ? Math.min(requestedSourceIn, Math.max(0, asset.duration - oneFrame))
+      : requestedSourceIn
+    const maximumDuration = asset
+      ? Math.max(oneFrame, asset.duration - sourceIn)
+      : Number.POSITIVE_INFINITY
+    const duration = Math.min(
+      Math.max(oneFrame, patch.duration ?? selectedClip.duration),
+      maximumDuration,
+    )
     setTracks((current) => current.map((track) => ({
       ...track,
       clips: track.clips.map((clip) => clip.id === selectedClipId ? {
-        ...clip, ...patch,
-        duration: Math.max(0.25, patch.duration ?? clip.duration),
-        start: Math.max(0, patch.start ?? clip.start),
-        sourceIn: Math.max(0, patch.sourceIn ?? clip.sourceIn),
+        ...clip, ...patch, duration, start: Math.max(0, patch.start ?? clip.start), sourceIn,
       } : clip),
     })))
   }
