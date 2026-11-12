@@ -461,3 +461,72 @@ pub fn render_timeline_video_frame(
     kyrocut_render::composite_transformed(project.width, project.height, &layers)
         .map_err(|error| MediaError::Render(error.to_string()))
 }
+
+
+#[cfg(test)]
+mod timeline_audio_tests {
+    use super::*;
+    use kyrocut_core::{Clip, Frame, FrameRate, MediaKind, MediaReference, Project, Track, TrackKind};
+
+    #[test]
+    fn project_audio_mix_honours_source_in_timeline_start_and_muted_tracks() {
+        let mut project = Project::new("Audio mix", 1920, 1080, FrameRate::FPS_30);
+        project.media.push(MediaReference {
+            id: "audio-1".into(),
+            name: "music.wav".into(),
+            kind: MediaKind::Audio,
+            size_bytes: 1024,
+            mime_type: "audio/wav".into(),
+            locator: "media/music.wav".into(),
+            duration_frames: Some(10),
+        });
+        project.tracks.push(Track {
+            id: "audio-track".into(),
+            name: "A1".into(),
+            kind: TrackKind::Audio,
+            muted: false,
+            locked: false,
+            clips: vec![Clip {
+                id: "audio-clip".into(),
+                media_id: "audio-1".into(),
+                timeline_start: Frame(1),
+                source_in: Frame(1),
+                duration_frames: 1,
+                enabled: true,
+            }],
+        });
+
+        let source = kyrocut_audio::PcmBuffer::new(
+            48_000, 2, vec![0.5; 3_200 * 2],
+        ).unwrap();
+        let sources = std::collections::HashMap::from([("audio-1".to_owned(), source)]);
+        let mixed = mix_project_audio(&project, &sources).unwrap();
+
+        assert_eq!(mixed.sample_rate(), 48_000);
+        assert_eq!(mixed.channels(), 2);
+        assert_eq!(mixed.frame_count(), 3_200);
+        assert_eq!(&mixed.samples()[..3_200], &vec![0.0; 3_200]);
+        assert!(mixed.samples()[3_200..].iter().all(|sample| (*sample - 0.5).abs() < 1e-6));
+    }
+
+    #[test]
+    fn project_audio_mix_rejects_missing_decoded_media() {
+        let mut project = Project::new("Missing audio", 1280, 720, FrameRate::FPS_30);
+        project.media.push(MediaReference {
+            id: "audio-1".into(), name: "missing.wav".into(),
+            kind: MediaKind::Audio, size_bytes: 0, mime_type: "audio/wav".into(),
+            locator: "media/missing.wav".into(), duration_frames: Some(30),
+        });
+        project.tracks.push(Track {
+            id: "audio-track".into(), name: "A1".into(), kind: TrackKind::Audio,
+            muted: false, locked: false,
+            clips: vec![Clip {
+                id: "audio-clip".into(), media_id: "audio-1".into(),
+                timeline_start: Frame(0), source_in: Frame(0),
+                duration_frames: 10, enabled: true,
+            }],
+        });
+        let result = mix_project_audio(&project, &std::collections::HashMap::new());
+        assert!(matches!(result, Err(MediaError::Audio(message)) if message.contains("no decoded PCM")));
+    }
+}
