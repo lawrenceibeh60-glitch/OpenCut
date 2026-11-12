@@ -38,7 +38,7 @@ impl FrameRate {
     pub fn frames_to_millis(self, frames: u64) -> u64 {
         let numerator = frames.saturating_mul(1_000)
             .saturating_mul(self.denominator as u64);
-        (numerator + (self.numerator as u64 / 2)) / self.numerator as u64
+        numerator.saturating_add(self.numerator as u64 / 2) / self.numerator as u64
     }
 
     /// Convert milliseconds to the nearest frame.
