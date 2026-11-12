@@ -25,6 +25,7 @@ const formatTime = (seconds: number, rate: RationalFrameRate = SEQUENCE_FRAME_RA
   return `${String(Math.floor(safe / 60)).padStart(2, '0')}:${String(Math.floor(safe % 60)).padStart(2, '0')}:${String(Math.floor((safe % 1) * rate.numerator / rate.denominator)).padStart(2, '0')}`
 }
 const mediaKind = (file: File): MediaKind | null => file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('image/') ? 'image' : null
+const formatFrameRate = (rate: RationalFrameRate) => `${Number((rate.numerator / rate.denominator).toFixed(3))} FPS`
 
 function Editor() {
   const [assets, setAssets] = useState<MediaAsset[]>([])
@@ -396,7 +397,7 @@ function Editor() {
 
         <section className="kx-center-column">
           <div className="kx-preview-panel">
-            <div className="kx-panel-title"><span>COMPOSITION VIEWER</span><span>1920 × 1080 <i>·</i> 30 FPS</span></div>
+            <div className="kx-panel-title"><span>COMPOSITION VIEWER</span><span>{projectResolution.width} × {projectResolution.height} <i>·</i> {formatFrameRate(projectFrameRate)}</span></div>
             <div className="kx-preview-stage">
               {selectedAsset && !selectedAsset.url ? <div className="kx-preview-empty"><FolderOpen size={30} /><strong>MEDIA OFFLINE</strong><span>RELINK THE SOURCE FILE TO PREVIEW</span></div> : selectedAsset?.kind === 'video' ? <video ref={videoRef} src={selectedAsset.url} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onTimeUpdate={(event) => { if (selectedClip) { const elapsed = event.currentTarget.currentTime - selectedClip.sourceIn; const clamped = Math.min(selectedClip.duration, Math.max(0, elapsed)); setPlayhead(selectedClip.start + clamped); if (elapsed >= selectedClip.duration) { event.currentTarget.pause(); setPlaying(false) } } }} controls={false} /> :
                 selectedAsset?.kind === 'image' ? <img src={selectedAsset.url} alt={selectedAsset.name} /> :
@@ -418,7 +419,7 @@ function Editor() {
                 <button onClick={() => addTrack('video')} title="Add video track"><Plus size={14} /> Video</button>
                 <button onClick={() => addTrack('audio')} title="Add audio track"><Plus size={14} /> Audio</button>
                 <button onClick={() => addTrack('graphics')} title="Add graphics track"><Plus size={14} /> Graphics</button>
-                <button className="kx-icon-button" title="Timeline options" onClick={() => setNotice('Timeline options: frame-accurate editing is enabled at 30 FPS.')}><ChevronDown size={15} /></button>
+                <button className="kx-icon-button" title="Timeline options" onClick={() => setNotice('Timeline options: frame-accurate editing is enabled at {formatFrameRate(projectFrameRate)}.')}><ChevronDown size={15} /></button>
               </div>
             </div>
             <div className="kx-ruler-row"><div className="kx-track-gutter">TRACKS</div><div className="kx-ruler">
@@ -443,7 +444,7 @@ function Editor() {
               </div>)}
               <div className="kx-playhead-line" style={{ left: `calc(176px + ${playhead * 12}px)` }} />
             </div>
-            <div className="kx-timeline-footer"><span>{tracks.length} TRACKS</span><span>{allClips.length} CLIPS</span><span>{assets.length} ASSETS</span><span className="kx-footer-spacer" /><span>30 FPS</span></div>
+            <div className="kx-timeline-footer"><span>{tracks.length} TRACKS</span><span>{allClips.length} CLIPS</span><span>{assets.length} ASSETS</span><span className="kx-footer-spacer" /><span>{formatFrameRate(projectFrameRate)}</span></div>
           </div>
         </section>
 
@@ -460,7 +461,7 @@ function Editor() {
             <button className="kx-delete-clip" onClick={removeSelectedClip}><Trash2 size={14} /> Remove clip</button>
             <div className="kx-section-label">SOURCE DETAILS</div>
             <div className="kx-detail-row"><span>File size</span><strong>{(selectedAsset.size / (1024 * 1024)).toFixed(2)} MB</strong></div>
-            <div className="kx-detail-row"><span>Frame rate</span><strong>30 FPS sequence</strong></div>
+            <div className="kx-detail-row"><span>Frame rate</span><strong>{formatFrameRate(projectFrameRate)}</strong></div>
             <div className="kx-detail-row"><span>Track</span><strong>{selectedTrack?.name ?? '—'}</strong></div>
           </div> : <div className="kx-inspector-empty"><Settings2 size={25} /><strong>No selection</strong><span>Select a clip on the timeline to inspect its timing and source properties.</span></div>}
         </aside>
