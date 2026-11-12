@@ -23,6 +23,9 @@ pub struct RgbaImage {
 
 impl RgbaImage {
     pub fn new(width: u32, height: u32, pixels: Vec<u8>) -> Result<Self, RenderError> {
+        if width == 0 || height == 0 {
+            return Err(RenderError::InvalidDimensions);
+        }
         let expected = (width as usize)
             .checked_mul(height as usize)
             .and_then(|pixels| pixels.checked_mul(4))
