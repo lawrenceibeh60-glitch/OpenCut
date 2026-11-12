@@ -7,6 +7,7 @@ export type ProjectManifest = {
   format: 'kyrocut-project'
   version: 1
   application?: string
+  id?: string
   name: string
   frameRate: RationalFrameRate
   resolution: { width: number; height: number }
@@ -156,6 +157,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
     format: 'kyrocut-project',
     version: 1,
     ...(typeof root.application === 'string' ? { application: root.application } : {}),
+    ...(typeof root.id === 'string' && root.id.trim() ? { id: root.id } : {}),
     name,
     frameRate,
     resolution,
