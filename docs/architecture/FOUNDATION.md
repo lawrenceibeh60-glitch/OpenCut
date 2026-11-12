@@ -35,7 +35,7 @@ Neither client owns a separate project format or editing model. Both consume the
 
 ### Project and edit model
 
-Owns project identity, resolution, rational frame rate, media references, tracks, clips, transactional edit commands, bounded undo/redo history, timeline-frame evaluation, validation, serialization, schema migrations and recovery snapshots.
+Owns project identity, resolution, rational frame rate, media references, tracks, clips, transactional edit commands, bounded undo/redo history, timeline-frame evaluation, frame-addressed scalar animation curves, validation, serialization, schema migrations and recovery snapshots.
 
 ### Media services
 
@@ -49,7 +49,7 @@ Maps timeline frame positions to active clips, source frames, track state, trans
 
 Represents source nodes, transforms, masks, effects, compositing and output targets. The first CPU RGBA compositor now provides source-over compositing and Normal/Multiply/Screen/Add blend modes. It currently expects same-sized RGBA8 layers and operates on encoded channel values; transforms, masks, linear-light color management, GPU backends and video-frame integration remain future work.
 
-### Audio graph
+### Animation evaluator\n\nThe core currently evaluates frame-addressed scalar curves with Hold, Linear, SmoothStep and cubic-Bezier interpolation. Property binding, vector/color curves, graph-editor UI and expression evaluation remain future work.\n\n### Audio graph
 
 Owns sample-accurate scheduling, mixing, gain automation, effects and output device integration.
 
