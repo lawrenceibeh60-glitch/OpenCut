@@ -3568,6 +3568,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "kyrocut-audio"
+version = "0.1.0"
+
+[[package]]
 name = "kyrocut-core"
 version = "0.1.0"
 dependencies = [
