@@ -591,7 +591,9 @@ pub fn render_compositing_graph_frame(
             .get("mediaId")
             .and_then(Value::as_str)
             .filter(|id| !id.trim().is_empty())
-            .ok_or_else(|| MediaError::Project(format!("media source node {} has no mediaId", node.id)))?
+            .ok_or_else(|| {
+                MediaError::Project(format!("media source node {} has no mediaId", node.id))
+            })?
             .to_owned();
         let path = media_paths
             .get(&media_id)
