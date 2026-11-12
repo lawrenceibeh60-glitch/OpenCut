@@ -17,6 +17,7 @@ pub struct AudioClip<'a> {
     pub enabled: bool,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct PcmBuffer {
     sample_rate: u32,
     channels: u16,
