@@ -34,7 +34,7 @@ Neither client owns a separate project format or editing model. Both consume the
 
 ### Project and edit model
 
-Owns project identity, resolution, rational frame rate, media references, tracks, clips, edit commands, validation, serialization, schema migrations and recovery snapshots.
+Owns project identity, resolution, rational frame rate, media references, tracks, clips, transactional edit commands, bounded undo/redo history, timeline-frame evaluation, validation, serialization, schema migrations and recovery snapshots.
 
 ### Media services
 
