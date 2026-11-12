@@ -119,6 +119,13 @@ pub struct Track {
     pub clips: Vec<Clip>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ActiveClip<'a> {
+    pub track_id: &'a str,
+    pub clip: &'a Clip,
+    pub source_frame: Frame,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Project {
     pub id: String,
@@ -163,6 +170,22 @@ impl Project {
             }
         }
         Ok(())
+    }
+
+    /// Evaluate the active clips at a timeline frame without mutating the project.
+    pub fn active_clips_at(&self, position: Frame) -> Vec<ActiveClip<'_>> {
+        self.tracks.iter().flat_map(|track| {
+            track.clips.iter().filter_map(move |clip| {
+                let active = clip.enabled
+                    && clip.timeline_start.0 <= position.0
+                    && position.0 < clip.timeline_end().0;
+                active.then_some(ActiveClip {
+                    track_id: &track.id,
+                    clip,
+                    source_frame: Frame(clip.source_in.0 + position.0 - clip.timeline_start.0),
+                })
+            })
+        }).collect()
     }
 
     pub fn duration_frames(&self) -> u64 {
@@ -251,6 +274,18 @@ mod tests {
         });
         assert_eq!(project.duration_frames(), 165);
         assert!(project.validate().is_ok());
+    }
+
+    #[test]
+    fn timeline_evaluator_returns_source_frame_for_active_clip() {
+        let mut project = Project::new("Evaluate", 1920, 1080, FrameRate::FPS_30);
+        project.media.push(MediaReference { id: "m".into(), name: "clip.mp4".into(), locator: "media/clip.mp4".into(), duration_frames: Some(500) });
+        project.tracks.push(Track { id: "v1".into(), name: "V1".into(), kind: TrackKind::Video, muted: false, locked: false, clips: vec![Clip { id: "c1".into(), media_id: "m".into(), timeline_start: Frame(100), source_in: Frame(20), duration_frames: 50, enabled: true }] });
+        let active = project.active_clips_at(Frame(115));
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].track_id, "v1");
+        assert_eq!(active[0].source_frame, Frame(35));
+        assert!(project.active_clips_at(Frame(150)).is_empty());
     }
 
     #[test]
