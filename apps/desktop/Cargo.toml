@@ -1,13 +1,16 @@
 [package]
-name = "opencut-desktop"
-description = "OpenCut desktop app, built with GPUI"
+name = "kyrocut-x1-desktop"
+description = "KYROCUT X1 desktop creative editor, built with GPUI"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "opencut-desktop"
+name = "kyrocut-x1-desktop"
 path = "src/main.rs"
 
 [dependencies]
 gpui = { workspace = true }
+kyrocut-core = { workspace = true }
+kyrocut-render = { workspace = true }
+kyrocut-audio = { workspace = true }

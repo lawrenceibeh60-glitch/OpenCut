@@ -15,6 +15,6 @@ impl Render for Preview {
             .items_center()
             .justify_center()
             .bg(colors.background)
-            .child("Preview")
+            .child("COMPOSITION VIEWER")
     }
 }

@@ -2,7 +2,9 @@
 resolver = "3"
 members = [
   'apps/desktop',
-  # 'crates/*',
+  'crates/kyrocut-audio',
+  'crates/kyrocut-core',
+  'crates/kyrocut-render',
 ]
 
 [workspace.package]
@@ -12,3 +14,6 @@ license = "MIT"
 
 [workspace.dependencies]
 gpui = "0.2.2"
+kyrocut-core = { path = "crates/kyrocut-core" }
+kyrocut-render = { path = "crates/kyrocut-render" }
+kyrocut-audio = { path = "crates/kyrocut-audio" }

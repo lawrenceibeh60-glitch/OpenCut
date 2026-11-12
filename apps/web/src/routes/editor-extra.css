@@ -1,0 +1,4 @@
+
+.kx-relink-box { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 8px 0; padding: 7px; border: 1px solid #695532; background: #292315; color: #e4c27c; font: 8px 'IBM Plex Mono', monospace; }
+.kx-relink-box button { padding: 5px 7px; color: #171207; border: 0; background: #e4c27c; font: 9px 'Inter', sans-serif; font-weight: 700; }
+.kx-audio-preview audio { width: min(320px, 70vw); height: 34px; margin-top: 8px; }

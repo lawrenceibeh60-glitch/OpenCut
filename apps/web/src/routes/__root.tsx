@@ -16,14 +16,22 @@ export const Route = createRootRoute({
         content: 'width=device-width, initial-scale=1',
       },
       {
-        title: 'OpenCut rewrite | beta.opencut.app',
+        name: 'theme-color',
+        content: '#09131D',
+      },
+      {
+        title: 'KYROCUT X1 — Creative Production System',
       },
     ],
     links: [
       {
         rel: 'icon',
-        href: '/favicon.ico',
-        type: 'image/x-icon',
+        href: '/kyrocut-icon.svg',
+        type: 'image/svg+xml',
+      },
+      {
+        rel: 'manifest',
+        href: '/manifest.json',
       },
       {
         rel: 'preconnect',

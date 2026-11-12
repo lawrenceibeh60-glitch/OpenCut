@@ -3568,10 +3568,29 @@ dependencies = [
 ]
 
 [[package]]
-name = "opencut-desktop"
+name = "kyrocut-audio"
+version = "0.1.0"
+
+[[package]]
+name = "kyrocut-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kyrocut-render"
+version = "0.1.0"
+
+[[package]]
+name = "kyrocut-x1-desktop"
 version = "0.1.0"
 dependencies = [
  "gpui",
+ "kyrocut-audio",
+ "kyrocut-core",
+ "kyrocut-render",
 ]
 
 [[package]]

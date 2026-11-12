@@ -1,9 +1,9 @@
-# OpenCut Desktop
+# KYROCUT X1 Desktop
 
 Built with [GPUI](https://www.gpui.rs).
 
 > [!WARNING]
-> Very early. Right now this is just a window that opens.
+> Foundation stage. The GPUI shell and editor panel layout are present, and the native package depends on the shared kyrocut-core, kyrocut-render and kyrocut-audio crates. The GPUI panels are not yet wired to the core edit model; native media import, timeline interaction, playback and rendering are not implemented yet.
 
 ## Running
 

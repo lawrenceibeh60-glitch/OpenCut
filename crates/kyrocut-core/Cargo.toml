@@ -1,0 +1,13 @@
+[package]
+name = "kyrocut-core"
+description = "Shared, platform-independent project and timeline model for KYROCUT X1"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[lib]
+path = "src/lib.rs"

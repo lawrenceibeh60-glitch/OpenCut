@@ -112,4 +112,4 @@ jobs:
             --target "$GITHUB_SHA" \
             --prerelease \
             --title "FFmpeg $version (build ${{ inputs.build }})" \
-            --notes "Shared LGPL builds of FFmpeg $version for OpenCut's media crate, built from $source by the Media dependencies workflow. Each archive holds the exact configure flags (BUILD.md) and FFmpeg's licence. Pin them with \`bun run crates/media/setup/pin.ts $tag\`."
+            --notes "Shared LGPL builds of FFmpeg $version for KYROCUT X1's media crate, built from $source by the Media dependencies workflow. Each archive holds the exact configure flags (BUILD.md) and FFmpeg's licence. Pin them with \`bun run crates/media/setup/pin.ts $tag\`."
