@@ -59,7 +59,7 @@ impl PcmBuffer {
         if sample_rate == 0 || channels == 0 {
             return Err(AudioError::InvalidFormat);
         }
-        if samples.len() % channels as usize != 0 {
+        if !samples.len().is_multiple_of(channels as usize) {
             return Err(AudioError::InvalidSampleCount);
         }
         if samples.iter().any(|sample| !sample.is_finite()) {
