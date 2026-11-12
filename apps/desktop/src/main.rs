@@ -36,7 +36,7 @@ fn main() {
         cx.open_window(
             WindowOptions {
                 titlebar: Some(TitlebarOptions {
-                    title: Some(SharedString::from("OpenCut")),
+                    title: Some(SharedString::from("KYROCUT X1")),
                     ..Default::default()
                 }),
                 window_bounds: Some(WindowBounds::Maximized(bounds)),
