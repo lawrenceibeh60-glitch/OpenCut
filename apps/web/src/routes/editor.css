@@ -147,3 +147,6 @@
   .kx-timeline-tools { gap: 3px; }
   .kx-timeline-tools button { padding: 0 4px; }
 }
+
+.kx-clip.disabled { opacity: .35; filter: grayscale(1); }
+.kx-field input[type='checkbox'] { width: 15px; height: 15px; accent-color: var(--kx-cyan); }
