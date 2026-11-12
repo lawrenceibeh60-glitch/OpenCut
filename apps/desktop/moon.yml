@@ -25,4 +25,4 @@ tasks:
       - '/Cargo.toml'
       - '/Cargo.lock'
     outputs:
-      - '/target/release/opencut-desktop'
+      - '/target/release/kyrocut-x1-desktop'
