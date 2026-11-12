@@ -47,7 +47,7 @@ Maps timeline frame positions to active clips, source frames, track state, trans
 
 ### Render graph
 
-Represents source nodes, transforms, masks, effects, compositing and output targets. The first CPU RGBA compositor now provides source-over compositing and Normal/Multiply/Screen/Add blend modes. It currently expects same-sized RGBA8 layers and operates on encoded channel values; transforms, masks, linear-light color management, GPU backends and video-frame integration remain future work.
+Represents source nodes, transforms, masks, effects, compositing and output targets. The first CPU RGBA compositor now provides source-over compositing, Normal/Multiply/Screen/Add blend modes, opacity and a transformed-layer path with position, scale, rotation and anchor using nearest-neighbour sampling. It operates on encoded RGBA8 channel values; masks, linear-light color management, GPU backends and video-frame integration remain future work.
 
 ### Animation evaluator
 
