@@ -110,8 +110,11 @@ pub struct Clip {
     #[serde(rename = "sourceInFrame")]
     pub source_in: Frame,
     pub duration_frames: u64,
+    #[serde(default = "default_clip_enabled")]
     pub enabled: bool,
 }
+
+fn default_clip_enabled() -> bool { true }
 
 impl Clip {
     pub fn timeline_end(&self) -> Frame {
@@ -170,10 +173,15 @@ pub struct Resolution {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+fn default_project_id() -> String { "project-1".to_owned() }
+fn default_application_name() -> String { "KYROCUT X1".to_owned() }
+
 pub struct ProjectDocument {
     pub format: String,
     pub version: u32,
+    #[serde(default = "default_application_name")]
     pub application: String,
+    #[serde(default = "default_project_id")]
     pub id: String,
     pub name: String,
     pub frame_rate: FrameRate,
