@@ -77,6 +77,130 @@ impl RgbaImage {
     }
 }
 
+/// Basic creative color controls. Values operate on normalized display RGB
+/// channels; this is an SDR working-space utility, not a color-managed grading
+/// pipeline.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ColorAdjustments {
+    /// Exposure compensation in stops, supported range -8..=8.
+    pub exposure_stops: f32,
+    /// Contrast pivoted around 0.5, supported range -1..=1.
+    pub contrast: f32,
+    /// Saturation multiplier, supported range 0..=3.
+    pub saturation: f32,
+    /// Display gamma, supported range 0.1..=4.
+    pub gamma: f32,
+    /// Additive brightness offset, supported range -1..=1.
+    pub brightness: f32,
+}
+
+impl Default for ColorAdjustments {
+    fn default() -> Self {
+        Self { exposure_stops: 0.0, contrast: 0.0, saturation: 1.0, gamma: 1.0, brightness: 0.0 }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CropRect {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Apply exposure, contrast, saturation, gamma and brightness to a copy.
+pub fn apply_color_adjustments(
+    image: &RgbaImage,
+    adjustments: ColorAdjustments,
+) -> Result<RgbaImage, RenderError> {
+    if !adjustments.exposure_stops.is_finite()
+        || !(-8.0..=8.0).contains(&adjustments.exposure_stops)
+        || !adjustments.contrast.is_finite()
+        || !(-1.0..=1.0).contains(&adjustments.contrast)
+        || !adjustments.saturation.is_finite()
+        || !(0.0..=3.0).contains(&adjustments.saturation)
+        || !adjustments.gamma.is_finite()
+        || !(0.1..=4.0).contains(&adjustments.gamma)
+        || !adjustments.brightness.is_finite()
+        || !(-1.0..=1.0).contains(&adjustments.brightness)
+    {
+        return Err(RenderError::InvalidColorAdjustment);
+    }
+
+    let exposure = 2.0_f32.powf(adjustments.exposure_stops);
+    let contrast = 1.0 + adjustments.contrast;
+    let mut output = image.clone();
+    for pixel in output.pixels.chunks_exact_mut(4) {
+        let mut rgb = [
+            pixel[0] as f32 / 255.0,
+            pixel[1] as f32 / 255.0,
+            pixel[2] as f32 / 255.0,
+        ];
+        let luminance = rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+        for channel in &mut rgb {
+            let exposed = *channel * exposure;
+            let contrasted = (exposed - 0.5) * contrast + 0.5;
+            let saturated = luminance + (contrasted - luminance) * adjustments.saturation;
+            let brightened = (saturated + adjustments.brightness).clamp(0.0, 1.0);
+            *channel = brightened.powf(1.0 / adjustments.gamma).clamp(0.0, 1.0);
+        }
+        pixel[0] = (rgb[0] * 255.0).round() as u8;
+        pixel[1] = (rgb[1] * 255.0).round() as u8;
+        pixel[2] = (rgb[2] * 255.0).round() as u8;
+    }
+    Ok(output)
+}
+
+/// Return a rectangular crop without changing the source image.
+pub fn crop_image(image: &RgbaImage, crop: CropRect) -> Result<RgbaImage, RenderError> {
+    let right = crop.x.checked_add(crop.width).ok_or(RenderError::InvalidCrop)?;
+    let bottom = crop.y.checked_add(crop.height).ok_or(RenderError::InvalidCrop)?;
+    if crop.width == 0 || crop.height == 0 || right > image.width || bottom > image.height {
+        return Err(RenderError::InvalidCrop);
+    }
+    let mut pixels = Vec::with_capacity(crop.width as usize * crop.height as usize * 4);
+    for y in crop.y..bottom {
+        let start = ((y as usize * image.width as usize) + crop.x as usize) * 4;
+        let end = start + crop.width as usize * 4;
+        pixels.extend_from_slice(&image.pixels[start..end]);
+    }
+    RgbaImage::new(crop.width, crop.height, pixels)
+}
+
+/// Remove pixels close to a chosen RGB key color using a soft alpha edge.
+/// Threshold and softness are normalized RGB distances in the range 0..=1.
+pub fn apply_chroma_key(
+    image: &RgbaImage,
+    key_rgb: [u8; 3],
+    threshold: f32,
+    softness: f32,
+) -> Result<RgbaImage, RenderError> {
+    if !threshold.is_finite() || !softness.is_finite()
+        || !(0.0..=1.0).contains(&threshold)
+        || !(0.0..=1.0).contains(&softness)
+    {
+        return Err(RenderError::InvalidKey);
+    }
+    let key = key_rgb.map(|channel| channel as f32 / 255.0);
+    let mut output = image.clone();
+    for pixel in output.pixels.chunks_exact_mut(4) {
+        let distance = (0..3)
+            .map(|channel| {
+                let delta = pixel[channel] as f32 / 255.0 - key[channel];
+                delta * delta
+            })
+            .sum::<f32>()
+            .sqrt() / 3.0_f32.sqrt();
+        let keep = if softness <= f32::EPSILON {
+            if distance <= threshold { 0.0 } else { 1.0 }
+        } else {
+            ((distance - threshold) / softness).clamp(0.0, 1.0)
+        };
+        pixel[3] = (pixel[3] as f32 * keep).round() as u8;
+    }
+    Ok(output)
+}
+
 pub struct CompositeLayer<'a> {
     pub image: &'a RgbaImage,
     pub opacity: f32,
@@ -109,6 +233,9 @@ pub enum RenderError {
     LayerDimensionsMismatch,
     InvalidOpacity,
     InvalidTransform,
+    InvalidColorAdjustment,
+    InvalidCrop,
+    InvalidKey,
 }
 
 impl fmt::Display for RenderError {
@@ -119,6 +246,9 @@ impl fmt::Display for RenderError {
             Self::LayerDimensionsMismatch => write!(f, "all compositor layers must match the output dimensions"),
             Self::InvalidOpacity => write!(f, "layer opacity must be finite and between 0 and 1"),
             Self::InvalidTransform => write!(f, "layer transform values must be finite and scale must be non-zero"),
+            Self::InvalidColorAdjustment => write!(f, "color adjustment values are outside their supported finite ranges"),
+            Self::InvalidCrop => write!(f, "crop rectangle must be non-empty and fully inside the source image"),
+            Self::InvalidKey => write!(f, "chroma key color and thresholds must be valid"),
         }
     }
 }
@@ -339,6 +469,41 @@ mod tests {
             composite(1, 1, &[CompositeLayer { image: &layer, opacity: 1.0, blend_mode: BlendMode::Normal }]),
             Err(RenderError::LayerDimensionsMismatch)
         );
+    }
+
+
+    #[test]
+    fn color_adjustments_preserve_alpha_and_validate_ranges() {
+        let source = RgbaImage::solid(1, 1, [100, 120, 140, 77]).unwrap();
+        let result = apply_color_adjustments(&source, ColorAdjustments {
+            exposure_stops: 1.0, ..ColorAdjustments::default()
+        }).unwrap();
+        assert_eq!(result.pixel(0, 0), Some([200, 240, 255, 77]));
+        assert_eq!(
+            apply_color_adjustments(&source, ColorAdjustments { gamma: 0.0, ..ColorAdjustments::default() }),
+            Err(RenderError::InvalidColorAdjustment)
+        );
+    }
+
+    #[test]
+    fn crop_image_returns_requested_rectangle() {
+        let source = RgbaImage::new(2, 2, vec![
+            1, 0, 0, 255, 2, 0, 0, 255,
+            3, 0, 0, 255, 4, 0, 0, 255,
+        ]).unwrap();
+        let cropped = crop_image(&source, CropRect { x: 1, y: 0, width: 1, height: 2 }).unwrap();
+        assert_eq!(cropped.width, 1);
+        assert_eq!(cropped.height, 2);
+        assert_eq!(cropped.pixels(), &[2, 0, 0, 255, 4, 0, 0, 255]);
+        assert_eq!(crop_image(&source, CropRect { x: 1, y: 1, width: 2, height: 1 }), Err(RenderError::InvalidCrop));
+    }
+
+    #[test]
+    fn chroma_key_removes_key_color_and_keeps_distant_color() {
+        let source = RgbaImage::new(2, 1, vec![0, 255, 0, 255, 255, 0, 0, 255]).unwrap();
+        let keyed = apply_chroma_key(&source, [0, 255, 0], 0.05, 0.1).unwrap();
+        assert_eq!(keyed.pixel(0, 0), Some([0, 255, 0, 0]));
+        assert_eq!(keyed.pixel(1, 0), Some([255, 0, 0, 255]));
     }
 
     #[test]
