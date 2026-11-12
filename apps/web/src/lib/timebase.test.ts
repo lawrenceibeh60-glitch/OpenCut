@@ -25,5 +25,6 @@ describe('rational timeline timebase', () => {
     expect(() => secondsToFrames(-1)).toThrow(RangeError)
     expect(() => secondsToFrames(Number.NaN)).toThrow(RangeError)
     expect(() => framesToSeconds(-1)).toThrow(RangeError)
+    expect(() => secondsToFrames(Number.MAX_VALUE)).toThrow(RangeError)
   })
 })
