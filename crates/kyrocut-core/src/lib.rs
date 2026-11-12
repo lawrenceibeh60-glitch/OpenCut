@@ -162,6 +162,57 @@ pub struct Project {
     pub media: Vec<MediaReference>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Resolution {
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectDocument {
+    pub format: String,
+    pub version: u32,
+    pub application: String,
+    pub id: String,
+    pub name: String,
+    pub frame_rate: FrameRate,
+    pub resolution: Resolution,
+    pub media: Vec<MediaReference>,
+    pub tracks: Vec<Track>,
+    pub playhead_frame: Frame,
+}
+
+impl ProjectDocument {
+    pub fn from_json(source: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(source)
+    }
+
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string_pretty(self)
+    }
+
+    pub fn into_project(self) -> Result<Project, ProjectError> {
+        if self.format != PROJECT_FORMAT {
+            return Err(ProjectError::UnsupportedProjectFormat);
+        }
+        if self.version != PROJECT_FORMAT_VERSION {
+            return Err(ProjectError::UnsupportedProjectVersion(self.version));
+        }
+        let project = Project {
+            id: self.id,
+            name: self.name,
+            frame_rate: self.frame_rate,
+            width: self.resolution.width,
+            height: self.resolution.height,
+            tracks: self.tracks,
+            media: self.media,
+        };
+        project.validate()?;
+        Ok(project)
+    }
+}
+
 impl Project {
     /// Create a validated, versioned interchange document from this project.
     pub fn to_document(&self, playhead_frame: Frame) -> Result<ProjectDocument, ProjectError> {
@@ -298,6 +349,42 @@ impl std::error::Error for ProjectError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn project_document_json_round_trips_frame_based_timeline() {
+        let mut project = Project::new("Interchange", 1920, 1080, FrameRate::FPS_30);
+        project.media.push(MediaReference {
+            id: "media-1".into(), name: "take.mp4".into(), kind: MediaKind::Video,
+            size_bytes: 4096, mime_type: "video/mp4".into(),
+            locator: "media/take.mp4".into(), duration_frames: Some(300),
+        });
+        project.tracks.push(Track {
+            id: "video-1".into(), name: "V1".into(), kind: TrackKind::Video,
+            muted: false, locked: false,
+            clips: vec![Clip {
+                id: "clip-1".into(), media_id: "media-1".into(),
+                timeline_start: Frame(15), source_in: Frame(30),
+                duration_frames: 120, enabled: true,
+            }],
+        });
+        let document = project.to_document(Frame(48)).unwrap();
+        let json = document.to_json().unwrap();
+        assert!(json.contains("\\"timelineStartFrame\\": 15"));
+        let reopened = ProjectDocument::from_json(&json).unwrap();
+        assert_eq!(reopened.playhead_frame, Frame(48));
+        assert_eq!(reopened.into_project().unwrap(), project);
+    }
+
+    #[test]
+    fn project_document_rejects_unsupported_version() {
+        let mut project = Project::new("Version", 1920, 1080, FrameRate::FPS_30);
+        let mut document = project.to_document(Frame(0)).unwrap();
+        document.version = 99;
+        assert_eq!(
+            document.into_project(),
+            Err(ProjectError::UnsupportedProjectVersion(99))
+        );
+    }
 
     #[test]
     fn frame_rate_reduces_fraction() {
