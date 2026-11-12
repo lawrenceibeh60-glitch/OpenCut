@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
   'apps/desktop',
+  'crates/kyrocut-audio',
   'crates/kyrocut-core',
   'crates/kyrocut-render',
 ]
