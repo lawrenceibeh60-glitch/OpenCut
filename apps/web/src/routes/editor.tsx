@@ -138,7 +138,7 @@ function Editor() {
         sourceInFrame: secondsToFrames(clip.sourceIn, projectFrameRate),
         durationFrames: Math.max(1, secondsToFrames(clip.duration, projectFrameRate)),
         enabled: clip.enabled,
-        ...(clip.effects ? { effects: clip.effects } : {}), effects: clip.effects,
+        ...(clip.effects ? { effects: clip.effects } : {}),
       })),
     })),
     playheadFrame: secondsToFrames(playhead, projectFrameRate),
@@ -510,7 +510,7 @@ function Editor() {
               <label className="kx-field"><span>Sepia · {selectedEffects.sepia}%</span><input type="range" min="0" max="100" value={selectedEffects.sepia} onChange={(event) => updateEffect({ sepia: Number(event.target.value) })} /></label>
               <label className="kx-field"><span>Hue rotation · {selectedEffects.hueRotate}°</span><input type="range" min="0" max="360" value={selectedEffects.hueRotate} onChange={(event) => updateEffect({ hueRotate: Number(event.target.value) })} /></label>
               <label className="kx-field"><span>Opacity · {selectedEffects.opacity}%</span><input type="range" min="0" max="100" value={selectedEffects.opacity} onChange={(event) => updateEffect({ opacity: Number(event.target.value) })} /></label>
-              <button className="kx-trim-actions" onClick={() => updateSelectedClip({ effects: { ...DEFAULT_CLIP_EFFECTS } })}>Reset effects</button>
+              <button onClick={() => updateSelectedClip({ effects: { ...DEFAULT_CLIP_EFFECTS } })}>Reset effects</button>
             </> : <div className="kx-empty-small"><WandSparkles size={22} /><span>Select a video or image clip to edit its live effects.</span></div>}
           </div>}
           {activeTab === 'text' && <div className="kx-placeholder-list"><strong>Graphics and titles</strong><p>Text and shape layers will use the same timeline and keyframe model as media clips.</p></div>}
