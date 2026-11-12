@@ -148,16 +148,20 @@ impl CompositingGraph {
             }
             has_output |= node.operation == NodeOperation::Output;
 
-            let mut socket_ids = HashSet::new();
-            for socket in node.inputs.iter().chain(node.outputs.iter()) {
-                if socket.id.trim().is_empty() || socket.name.trim().is_empty() {
-                    return Err(GraphError::EmptyIdentifier);
-                }
-                if !socket_ids.insert(socket.id.as_str()) {
-                    return Err(GraphError::DuplicateSocket {
-                        node_id: node.id.clone(),
-                        socket_id: socket.id.clone(),
-                    });
+            // Input and output sockets are separate namespaces. A pass-through
+            // node may legitimately expose an "image" input and "image" output.
+            for sockets in [&node.inputs, &node.outputs] {
+                let mut socket_ids = HashSet::new();
+                for socket in sockets {
+                    if socket.id.trim().is_empty() || socket.name.trim().is_empty() {
+                        return Err(GraphError::EmptyIdentifier);
+                    }
+                    if !socket_ids.insert(socket.id.as_str()) {
+                        return Err(GraphError::DuplicateSocket {
+                            node_id: node.id.clone(),
+                            socket_id: socket.id.clone(),
+                        });
+                    }
                 }
             }
         }
@@ -375,6 +379,24 @@ mod tests {
             graph.execution_order().unwrap(),
             vec!["source", "grade", "output"]
         );
+    }
+
+
+    #[test]
+    fn input_and_output_sockets_may_share_the_same_id() {
+        let graph = CompositingGraph {
+            id: "pass-through".into(),
+            nodes: vec![
+                node("source", NodeOperation::MediaSource, vec![], vec![socket("image", SocketType::Image)]),
+                node("transform", NodeOperation::Transform2d, vec![socket("image", SocketType::Image)], vec![socket("image", SocketType::Image)]),
+                node("output", NodeOperation::Output, vec![socket("image", SocketType::Image)], vec![]),
+            ],
+            connections: vec![
+                connection("c1", "source", "image", "transform", "image"),
+                connection("c2", "transform", "image", "output", "image"),
+            ],
+        };
+        assert!(graph.validate().is_ok());
     }
 
     #[test]
