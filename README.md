@@ -15,7 +15,7 @@ KYROCUT X1 is being developed as a shared creative platform with a browser edito
 ## Current foundation
 
 - Shared Rust core crate: rational frame-rate handling, frame/time conversion, media references, tracks, clips, project duration and validation.
-- Web editor: local media import, media bin, video/image source preview, track creation, clip placement, clip selection, basic timing adjustments, track mute/lock flags and .kcx1 project-manifest download.
+- Web editor: local media import, media bin, video/image source preview, track creation, clip placement, clip selection, basic timing adjustments, track mute/lock flags, .kcx1 project save/open and filename-based source-media relinking.
 - Product identity and landing page for KYROCUT X1.
 - Desktop application identity updated and wired to the shared core crate.
 
@@ -75,7 +75,7 @@ moon run web:build
 
 ## Project manifest
 
-The web foundation exports a .kcx1 project manifest using the kyrocut-project format identifier and version 1. It stores project settings, track structure, clip timing and portable media locators. Media binaries are deliberately not embedded in the JSON manifest. A complete relinking and asset-packaging workflow is still required before project interchange is production-ready.
+The web foundation exports a .kcx1 project manifest using the kyrocut-project format identifier and version 1. It stores project settings, track structure, clip timing and portable media locators. Media binaries are deliberately not embedded in the JSON manifest. The browser foundation includes basic filename-based relinking; portable asset packaging and cross-platform round-trip tests are still required before project interchange is production-ready.
 
 ## Upstream
 
