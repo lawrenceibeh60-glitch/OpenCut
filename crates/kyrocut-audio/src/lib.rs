@@ -194,7 +194,7 @@ impl PcmBuffer {
         let count = available.min(source_frame_count);
         let (left_pan, right_pan) = if channels == 2 {
             let angle = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
-            (angle.cos() * std::f32::consts::SQRT_2, angle.sin() * std::f32::consts::SQRT_2)
+            (angle.cos(), angle.sin())
         } else {
             (1.0, 1.0)
         };
@@ -327,12 +327,22 @@ mod tests {
     }
 
     #[test]
-    fn stereo_pan_moves_signal_between_channels() {
+    fn stereo_equal_power_pan_moves_signal_between_channels() {
         let mut destination = PcmBuffer::silence(48_000, 2, 1).unwrap();
         let source = PcmBuffer::new(48_000, 2, vec![1.0, 1.0]).unwrap();
         destination.mix_from(&source, 0, 1.0, -1.0).unwrap();
-        assert!(destination.samples()[0] > 1.4);
+        assert!((destination.samples()[0] - 1.0).abs() < 0.0001);
         assert!(destination.samples()[1].abs() < 0.0001);
+    }
+
+    #[test]
+    fn stereo_center_pan_uses_equal_power_gains() {
+        let mut destination = PcmBuffer::silence(48_000, 2, 1).unwrap();
+        let source = PcmBuffer::new(48_000, 2, vec![1.0, 1.0]).unwrap();
+        destination.mix_from(&source, 0, 1.0, 0.0).unwrap();
+        let expected = std::f32::consts::FRAC_1_SQRT_2;
+        assert!((destination.samples()[0] - expected).abs() < 0.0001);
+        assert!((destination.samples()[1] - expected).abs() < 0.0001);
     }
 
     #[test]
