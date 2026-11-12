@@ -568,6 +568,63 @@ fn project_frame_to_source_frame(
     usize::try_from(numerator / denominator)
         .map_err(|_| MediaError::InvalidFrame("source frame exceeds addressable memory".into()))
 }
+/// Decode each Media Source node and execute its compositing graph at a project frame.
+/// Source paths are resolved by the stable media ID in each node. The graph is
+/// cloned so source-frame offsets can be resolved without mutating the saved document.
+pub fn render_compositing_graph_frame(
+    graph: &kyrocut_core::CompositingGraph,
+    project_frame: kyrocut_core::Frame,
+    media_paths: &std::collections::HashMap<String, PathBuf>,
+    width: u32,
+    height: u32,
+) -> Result<kyrocut_render::RgbaImage, MediaError> {
+    use serde_json::Value;
+
+    let mut evaluated_graph = graph.clone();
+    let mut sources = std::collections::HashMap::new();
+    for node in &mut evaluated_graph.nodes {
+        if node.operation != kyrocut_core::NodeOperation::MediaSource {
+            continue;
+        }
+        let media_id = node
+            .parameters
+            .get("mediaId")
+            .and_then(Value::as_str)
+            .filter(|id| !id.trim().is_empty())
+            .ok_or_else(|| MediaError::Project(format!("media source node {} has no mediaId", node.id)))?
+            .to_owned();
+        let path = media_paths
+            .get(&media_id)
+            .ok_or_else(|| MediaError::Open(format!("no linked file for media {media_id}")))?;
+        let source_offset = node
+            .parameters
+            .get("sourceFrame")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let source_frame = project_frame
+            .0
+            .checked_add(source_offset)
+            .and_then(|frame| usize::try_from(frame).ok())
+            .ok_or_else(|| MediaError::InvalidFrame("compositing source frame overflow".into()))?;
+        let source_key = format!("{media_id}::{}", node.id);
+        let decoded = decode_video_frame_at(path, source_frame)?;
+        let image = kyrocut_render::RgbaImage::new(decoded.width, decoded.height, decoded.rgba)
+            .map_err(|error| MediaError::Render(error.to_string()))?;
+        sources.insert(source_key.clone(), image);
+        node.parameters
+            .insert("mediaId".into(), Value::String(source_key));
+    }
+
+    kyrocut_render::render_compositing_graph_at_frame(
+        &evaluated_graph,
+        &sources,
+        width,
+        height,
+        project_frame.0,
+    )
+    .map_err(|error| MediaError::Render(error.to_string()))
+}
+
 /// Evaluate the shared Rust project timeline and composite active video clips
 /// at a timeline frame. Media paths are resolved by stable project media ID.
 /// Audio tracks are intentionally rendered by the separate PCM mixer.
