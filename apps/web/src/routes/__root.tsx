@@ -22,8 +22,8 @@ export const Route = createRootRoute({
     links: [
       {
         rel: 'icon',
-        href: '/favicon.ico',
-        type: 'image/x-icon',
+        href: '/kyrocut-icon.svg',
+        type: 'image/svg+xml',
       },
       {
         rel: 'preconnect',
