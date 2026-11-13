@@ -84,6 +84,15 @@ function Editor() {
   useEffect(() => () => gpuCompositorRef.current?.dispose(), [])
 
   useEffect(() => {
+    const link = document.createElement('link')
+    link.rel = 'stylesheet'
+    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(titleFontFamily).replace(/%20/g, '+')}:wght@400;700&display=swap`
+    link.dataset.kyrocutFont = titleFontFamily
+    document.head.appendChild(link)
+    return () => link.remove()
+  }, [titleFontFamily])
+
+  useEffect(() => {
     if (!trimDrag) return
     const move = (event: PointerEvent) => {
       const deltaFrames = Math.round((event.clientX - trimDrag.startX) / 12 * projectFrameRate.numerator / projectFrameRate.denominator)
