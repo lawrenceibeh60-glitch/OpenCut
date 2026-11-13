@@ -127,6 +127,32 @@ describe('KYROCUT X1 project manifest', () => {
     expect(parsed.tracks[0].clips[0].parentClipId).toBe('null-clip')
   })
 
+  it('persists a selected 3D LUT and bounded intensity', () => {
+    const withLut = {
+      ...validProject,
+      tracks: [{
+        ...validProject.tracks[0],
+        clips: [{ ...validProject.tracks[0].clips[0], lutId: 'kodak-2393', lutIntensity: 0.65 }],
+      }],
+    }
+    const parsed = parseProjectManifest(JSON.stringify(withLut))
+    expect(parsed.tracks[0].clips[0].lutId).toBe('kodak-2393')
+    expect(parsed.tracks[0].clips[0].lutIntensity).toBe(0.65)
+  })
+
+  it('rejects invalid LUT intensity and orphan intensity values', () => {
+    const tooStrong = {
+      ...validProject,
+      tracks: [{ ...validProject.tracks[0], clips: [{ ...validProject.tracks[0].clips[0], lutId: 'kodak-2393', lutIntensity: 1.5 }] }],
+    }
+    const orphan = {
+      ...validProject,
+      tracks: [{ ...validProject.tracks[0], clips: [{ ...validProject.tracks[0].clips[0], lutIntensity: 0.5 }] }],
+    }
+    expect(() => parseProjectManifest(JSON.stringify(tooStrong))).toThrow('LUT intensity')
+    expect(() => parseProjectManifest(JSON.stringify(orphan))).toThrow('requires a LUT ID')
+  })
+
   it('rejects unsupported format versions', () => {
     expect(() => parseProjectManifest(JSON.stringify({ ...validProject, version: 2 }))).toThrow('Unsupported')
   })
