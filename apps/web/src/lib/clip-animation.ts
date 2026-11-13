@@ -34,6 +34,7 @@ export function evaluateClipEffects(
   return {
     ...base,
     opacity: evaluateKeyframes(base.opacity, keyframes, 'opacity', frame),
+    volume: evaluateKeyframes(base.volume, keyframes, 'volume', frame),
     positionX: evaluateKeyframes(base.positionX, keyframes, 'positionX', frame),
     positionY: evaluateKeyframes(base.positionY, keyframes, 'positionY', frame),
     scaleX: evaluateKeyframes(base.scaleX, keyframes, 'scaleX', frame),
