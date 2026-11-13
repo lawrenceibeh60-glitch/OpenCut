@@ -155,3 +155,24 @@
 .kx-clip:active { cursor: grabbing; }
 
 .kx-project-meta { color: var(--kx-muted); font: 9px 'IBM Plex Mono', monospace; white-space: nowrap; }
+
+
+/* Scroll and resizing foundations */
+.kx-workspace { grid-template-columns: minmax(180px,var(--kx-media-width,248px)) 6px minmax(300px,1fr) 6px minmax(210px,var(--kx-inspector-width,260px)); }
+.kx-resize-handle { position:relative;z-index:8;background:#111d27;touch-action:none; }
+.kx-resize-handle.vertical { cursor:col-resize; }
+.kx-resize-handle.vertical:after { content:'';position:absolute;top:0;bottom:0;left:2px;width:2px;background:#355064; }
+.kx-resize-handle.horizontal { height:7px;flex:0 0 7px;cursor:row-resize; }
+.kx-resize-handle.horizontal:after { content:'';position:absolute;left:0;right:0;top:2px;height:2px;background:#355064; }
+.kx-menu-row { position:relative;z-index:20;overflow:visible; }
+.kx-menu-item { position:relative;height:100%;display:flex;align-items:center; }
+.kx-menu-item>button { height:100%;padding:0;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer; }
+.kx-menu-dropdown { position:absolute;z-index:30;top:100%;left:-10px;min-width:190px;display:flex;flex-direction:column;padding:5px;border:1px solid #30495b;background:#101a24;box-shadow:0 12px 28px #0009; }
+.kx-menu-dropdown button { min-height:31px;padding:0 10px;border:0;background:transparent;color:#c1d0db;text-align:left;font-size:10px; }
+.kx-menu-dropdown button:hover { background:#1a3040;color:#5bd5e3; }
+.kx-floating-settings,.kx-timeline-options { display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:9px 12px;border:1px solid #2b4354;background:#111e29;color:#b8c8d3;font-size:10px; }
+.kx-floating-settings { position:absolute;z-index:12;right:12px;bottom:48px;box-shadow:0 10px 24px #0009; }
+.kx-floating-settings label,.kx-timeline-options label { display:flex;align-items:center;gap:7px; }
+.kx-timeline-options input[type=range] { width:120px;accent-color:var(--kx-cyan); }
+.kx-track-lane { min-width:0; }
+@media(max-width:700px){.kx-editor{height:auto;min-height:100dvh;overflow:visible}.kx-workspace{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(170px,auto) minmax(560px,auto) minmax(240px,auto);flex:none}.kx-workspace>.kx-resize-handle{display:none}.kx-inspector{display:flex;min-height:240px;overflow:visible}.kx-inspector-content{overflow:visible}.kx-center-column{min-height:560px;overflow:visible}.kx-preview-panel{flex:0 0 310px!important}.kx-menu-row{overflow-x:auto;overflow-y:visible}.kx-menu-dropdown{position:fixed;top:90px;left:10px}}

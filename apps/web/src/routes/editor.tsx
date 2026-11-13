@@ -18,7 +18,7 @@ import type { CreativePreset, CreativePresetKind } from '../lib/creative-library
 import {
   AudioLines, ChevronDown, Clapperboard, Film, FolderOpen, ImagePlus, Layers3,
   Minus, Music2, Pause, Play, Plus, Save, Scissors, Settings2, Sparkles, StepBack, StepForward, Trash2,
-  Upload, Video, Volume2, WandSparkles, X,
+  Upload, Video, Volume2, WandSparkles, X as CloseIcon,
 } from 'lucide-react'
 import './editor.css'
 import './editor-extra.css'
@@ -1027,7 +1027,7 @@ function Editor() {
       </header>
       <div className="kx-session-warning" role="note">TEMPORARY WORKSPACE · Refreshing or leaving clears this session. Export Draft to keep an editable copy.</div>
       {showCompositionSettings && <section className="kx-composition-settings">
-        <div className="kx-composition-settings-head"><strong>COMPOSITION SETTINGS</strong><button className="kx-icon-button" onClick={() => setShowCompositionSettings(false)} aria-label="Close composition settings"><X size={14} /></button></div>
+        <div className="kx-composition-settings-head"><strong>COMPOSITION SETTINGS</strong><button className="kx-icon-button" onClick={() => setShowCompositionSettings(false)} aria-label="Close composition settings"><CloseIcon size={14} /></button></div>
         <label>Resolution
           <select value={`${projectResolution.width}x${projectResolution.height}`} onChange={(event) => { const [width, height] = event.target.value.split('x').map(Number); setProjectResolution({ width, height }) }}>
             <option value="1280x720">1280 × 720 · HD</option>
