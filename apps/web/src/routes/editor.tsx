@@ -86,9 +86,8 @@ function Editor() {
             return { ...entry, duration: Math.min(maximum, Math.max(oneFrame, trimDrag.duration + requested)) }
           }
           const maximumRight = trimDrag.duration - oneFrame
-          const minimumLeft = -trimDrag.sourceIn
-          const maximumSource = asset?.durationKnown ? asset.duration - trimDrag.sourceIn - oneFrame : maximumRight
-          const delta = Math.min(maximumRight, maximumSource, Math.max(minimumLeft, requested))
+          const minimumLeft = Math.max(-trimDrag.sourceIn, -trimDrag.start)
+          const delta = Math.min(maximumRight, Math.max(minimumLeft, requested))
           return {
             ...entry,
             start: Math.max(0, trimDrag.start + delta),
