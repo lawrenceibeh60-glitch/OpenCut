@@ -531,7 +531,6 @@ function Editor() {
     requestAnimationFrame(() => {
       const audioSources: Array<HTMLAudioElement | HTMLVideoElement> = [
         ...audioTimelineClips.map((clip) => audioElementsRef.current.get(clip.id)).filter((item): item is HTMLAudioElement => Boolean(item)),
-        ...[],
       ]
       const capturedAudio = new Set<string>()
       for (const source of audioSources) {
