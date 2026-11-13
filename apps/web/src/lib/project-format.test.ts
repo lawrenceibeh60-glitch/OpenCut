@@ -61,7 +61,7 @@ describe('KYROCUT X1 project manifest', () => {
         ...validProject.tracks[0],
         clips: [{
           ...validProject.tracks[0].clips[0],
-          effects: { blendMode: 'screen', brightness: 125, contrast: 90, saturation: 140, blur: 2.5, grayscale: 0, sepia: 15, hueRotate: 210, opacity: 80, positionX: 12, positionY: -8, scaleX: 1.5, scaleY: 0.75, rotation: 45 },
+          effects: { volume: 125, blendMode: 'screen', brightness: 125, contrast: 90, saturation: 140, blur: 2.5, grayscale: 0, sepia: 15, hueRotate: 210, opacity: 80, positionX: 12, positionY: -8, scaleX: 1.5, scaleY: 0.75, rotation: 45 },
           keyframes: [
             { frame: 0, property: 'positionX', value: 0, interpolation: 'linear' },
             { frame: 30, property: 'positionX', value: 25, interpolation: 'hold' },
