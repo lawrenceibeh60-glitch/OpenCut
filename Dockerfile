@@ -9,13 +9,18 @@ COPY . .
 WORKDIR /app/crates/kyrocut-render
 RUN wasm-pack build --target web --out-dir ../../apps/web/src/generated/renderer-wasm --out-name kyrocut_renderer --release
 
-# Build and run the TanStack Start/Nitro web application.
+# Build and run the TanStack Start/Nitro web application with Bun,
+# which is the package manager used by this repository.
 FROM node:22-bookworm-slim AS web
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
+ENV PATH="/root/.bun/bin:${PATH}"
+WORKDIR /app
+COPY --from=wasm-builder /app/bunfig.toml ./bunfig.toml
 WORKDIR /app/apps/web
 COPY --from=wasm-builder /app/apps/web ./
-RUN npm install --no-audit --no-fund
-RUN npm run build
+RUN curl -fsSL https://bun.sh/install | bash
+RUN bun install --no-progress
+RUN bun run build
 EXPOSE 3000
-CMD ["npm", "run", "start"]
+CMD ["bun", "run", "start"]
