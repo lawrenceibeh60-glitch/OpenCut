@@ -6,6 +6,8 @@
 use std::fmt;
 
 mod graph;
+#[cfg(target_arch = "wasm32")]
+mod wasm;
 
 pub use graph::{GraphRenderError, render_compositing_graph, render_compositing_graph_at_frame};
 
