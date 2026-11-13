@@ -176,3 +176,9 @@
 .kx-timeline-options input[type=range] { width:120px;accent-color:var(--kx-cyan); }
 .kx-track-lane { min-width:0; }
 @media(max-width:700px){.kx-editor{height:auto;min-height:100dvh;overflow:visible}.kx-workspace{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(170px,auto) minmax(560px,auto) minmax(240px,auto);flex:none}.kx-workspace>.kx-resize-handle{display:none}.kx-inspector{display:flex;min-height:240px;overflow:visible}.kx-inspector-content{overflow:visible}.kx-center-column{min-height:560px;overflow:visible}.kx-preview-panel{flex:0 0 310px!important}.kx-menu-row{overflow-x:auto;overflow-y:visible}.kx-menu-dropdown{position:fixed;top:90px;left:10px}}
+
+
+/* Ensure every dock remains reachable and scrolls within its own pane */
+.kx-media-content,.kx-inspector-content,.kx-text-tools{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain}.kx-media-panel,.kx-inspector{min-height:0}.kx-center-column{min-height:0}.kx-track-scroll{min-height:0;overscroll-behavior:contain}
+@media(max-width:1050px){.kx-inspector{display:flex}}
+@media(max-width:700px){.kx-media-content,.kx-inspector-content,.kx-text-tools{overflow:visible;min-height:auto}.kx-inspector{display:flex}}

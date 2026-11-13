@@ -141,7 +141,7 @@ function Editor() {
   useEffect(() => {
     if (!trimDrag) return
     const move = (event: PointerEvent) => {
-      const deltaFrames = Math.round((event.clientX - trimDrag.startX) / 12 * projectFrameRate.numerator / projectFrameRate.denominator)
+      const deltaFrames = Math.round((event.clientX - trimDrag.startX) / timelineZoom * projectFrameRate.numerator / projectFrameRate.denominator)
       const track = tracks.find((item) => item.id === trimDrag.trackId)
       const clip = track?.clips.find((item) => item.id === trimDrag.clipId)
       if (!track || !clip || track.locked) return
@@ -1245,7 +1245,7 @@ function Editor() {
                 <button className="kx-icon-button" title="Timeline options" aria-expanded={showTimelineOptions} onClick={() => setShowTimelineOptions((open) => !open)}><ChevronDown size={15} /></button>
               </div>
             </div>
-            {showTimelineOptions && <div className="kx-timeline-options"><label>Timeline zoom <input type="range" min="4" max="36" step="1" value={timelineZoom} onChange={(event) => setTimelineZoom(Number(event.target.value))} /><span>{timelineZoom}px / sec</span></label><label><input type="checkbox" checked={snapEnabled} onChange={(event) => setSnapEnabled(event.target.checked)} /> Snap clips to frame boundaries</label><button type="button" onClick={() => trackScrollRef.current?.scrollTo({ left: Math.max(0, playhead * timelineZoom - (trackScrollRef.current.clientWidth / 2)), behavior: 'smooth' })}>Center playhead</button><button type="button" onClick={() => setTimelineZoom(12)}>Reset zoom</button></div>}
+            {showTimelineOptions && <div className="kx-timeline-options"><label>Timeline zoom <input type="range" min="4" max="36" step="1" value={timelineZoom} onChange={(event) => setTimelineZoom(Number(event.target.value))} /><span>{timelineZoom}px / sec</span></label><label><input type="checkbox" checked={snapEnabled} onChange={(event) => setSnapEnabled(event.target.checked)} /> Snap clips to frame boundaries</label><button type="button" onClick={() => { const scroller = trackScrollRef.current; if (scroller) scroller.scrollTo({ left: Math.max(0, playhead * timelineZoom - scroller.clientWidth / 2), behavior: 'smooth' }) }}>Center playhead</button><button type="button" onClick={() => setTimelineZoom(12)}>Reset zoom</button></div>}
             <div className="kx-ruler-row"><div className="kx-track-gutter">TRACKS</div><div className="kx-ruler">
               {Array.from({ length: Math.ceil(projectDuration / 5) + 1 }, (_, index) => <span key={index} style={{ left: `${index * 5 * timelineZoom}px` }}>{formatTime(index * 5, projectFrameRate)}</span>)}
               <div className="kx-playhead" style={{ left: `${playhead * timelineZoom}px` }} />
