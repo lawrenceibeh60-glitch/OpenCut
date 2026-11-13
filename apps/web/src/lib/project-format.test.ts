@@ -120,6 +120,13 @@ describe('KYROCUT X1 project manifest', () => {
     expect(() => parseProjectManifest(JSON.stringify(invalid))).toThrow('Duplicate keyframe')
   })
 
+  it('persists null controller media and child parent references', () => {
+    const project = { ...validProject, media: [...validProject.media, { id: 'null-media', name: 'Null Controller', kind: 'null', size: 0, durationFrames: 900, mimeType: 'application/x-kyrocut-null', locator: 'media/null' }], tracks: [...validProject.tracks.map((track) => ({ ...track, clips: track.clips.map((clip) => ({ ...clip, parentClipId: 'null-clip' })) })), { id: 'adj-1', name: 'ADJ1', kind: 'adjustment', muted: false, locked: false, clips: [{ id: 'null-clip', mediaId: 'null-media', timelineStartFrame: 0, sourceInFrame: 0, durationFrames: 900 }] }] }
+    const parsed = parseProjectManifest(JSON.stringify(project))
+    expect(parsed.media[1].kind).toBe('null')
+    expect(parsed.tracks[0].clips[0].parentClipId).toBe('null-clip')
+  })
+
   it('rejects unsupported format versions', () => {
     expect(() => parseProjectManifest(JSON.stringify({ ...validProject, version: 2 }))).toThrow('Unsupported')
   })
