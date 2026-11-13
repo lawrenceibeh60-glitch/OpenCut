@@ -5,6 +5,7 @@ import { framesToSeconds, secondsToFrames, SEQUENCE_FRAME_RATE } from '../lib/ti
 import type { RationalFrameRate } from '../lib/timebase'
 import { parseProjectManifest, type ClipEffects, type ClipKeyframe, type ProjectManifest } from '../lib/project-format'
 import { evaluateClipEffects } from '../lib/clip-animation'
+import { inheritNullLayerTransform } from '../lib/null-layer'
 import { applyClipTrim } from '../lib/timeline-editing'
 import { createWebGLCompositor, type WebGLCompositor } from '../lib/webgl-compositor'
 import { getMediaBlob, saveMediaBlob } from '../lib/media-storage'
@@ -20,9 +21,9 @@ import './editor-extra.css'
 
 export const Route = createFileRoute('/editor')({ component: Editor })
 
-type MediaKind = 'video' | 'audio' | 'image'
+type MediaKind = 'video' | 'audio' | 'image' | 'null'
 type MediaAsset = { id: string; name: string; kind: MediaKind; url: string; size: number; duration: number; durationKnown: boolean; mimeType: string; missing?: boolean }
-type TimelineClip = { id: string; mediaId: string; start: number; sourceIn: number; duration: number; enabled: boolean; effects?: ClipEffects; keyframes?: ClipKeyframe[] }
+type TimelineClip = { id: string; mediaId: string; start: number; sourceIn: number; duration: number; enabled: boolean; effects?: ClipEffects; keyframes?: ClipKeyframe[]; parentClipId?: string }
 type TimelineTrack = { id: string; name: string; kind: 'video' | 'audio' | 'graphics' | 'adjustment'; clips: TimelineClip[]; muted: boolean; locked: boolean }
 type TrimDrag = { clipId: string; trackId: string; edge: 'left' | 'right'; startX: number; start: number; sourceIn: number; duration: number }
 
@@ -124,7 +125,7 @@ function Editor() {
                 duration: framesToSeconds(asset.durationFrames ?? 0, frameRate),
                 durationKnown: asset.durationFrames !== null,
                 mimeType: blob?.type ?? asset.mimeType ?? '',
-                missing: !blob,
+                missing: asset.kind !== 'null' && !blob,
               }
             }))
             if (!active) {
@@ -141,13 +142,13 @@ function Editor() {
                 id: clip.id, mediaId: clip.mediaId,
                 start: framesToSeconds(clip.timelineStartFrame, frameRate),
                 sourceIn: framesToSeconds(clip.sourceInFrame, frameRate),
-                duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled, effects: clip.effects, keyframes: clip.keyframes,
+                duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled, effects: clip.effects, keyframes: clip.keyframes, parentClipId: clip.parentClipId, parentClipId: clip.parentClipId,
               })),
             })))
             setProjectId(manifest.id ?? createId())
             setProjectName(manifest.name || 'Recovered project')
             setPlayhead(framesToSeconds(manifest.playheadFrame ?? 0, frameRate))
-            const offline = restoredAssets.filter((asset) => !asset.url).length
+            const offline = restoredAssets.filter((asset) => asset.kind !== 'null' && !asset.url).length
             setNotice(offline
               ? `Recovered project. ${offline} source file(s) need relinking.`
               : 'Recovered project and restored its locally stored media.')
@@ -184,10 +185,26 @@ function Editor() {
   const selectedAsset = assets.find((asset) => asset.id === selectedClip?.mediaId) ?? null
   const projectDuration = Math.max(30, ...allClips.filter((clip) => clip.enabled).map((clip) => clip.start + clip.duration))
   const selectedTrack = tracks.find((track) => track.clips.some((clip) => clip.id === selectedClipId))
-  const missingAssets = assets.filter((asset) => !asset.url)
+  const missingAssets = assets.filter((asset) => asset.kind !== 'null' && !asset.url)
   const selectedBaseEffects = selectedClip?.effects ?? DEFAULT_CLIP_EFFECTS
   const selectedFrame = selectedClip ? secondsToFrames(Math.max(0, playhead - selectedClip.start), projectFrameRate) : 0
-  const selectedEffects = evaluateClipEffects(selectedBaseEffects, selectedClip?.keyframes, selectedFrame)
+  const getClipEffects = (clip: TimelineClip) => {
+    let result = getClipEffects(clip)
+    let parentId = clip.parentClipId
+    const visited = new Set([clip.id])
+    while (parentId && !visited.has(parentId)) {
+      visited.add(parentId)
+      const track = tracks.find((item) => item.clips.some((entry) => entry.id === parentId))
+      const parent = track?.clips.find((entry) => entry.id === parentId)
+      const asset = parent ? assets.find((item) => item.id === parent.mediaId) : undefined
+      if (!parent || asset?.kind !== 'null' || !parent.enabled || track?.muted || playhead < parent.start || playhead >= parent.start + parent.duration) break
+      const parentEffects = evaluateClipEffects(parent.effects ?? DEFAULT_CLIP_EFFECTS, parent.keyframes, secondsToFrames(Math.max(0, playhead - parent.start), projectFrameRate))
+      result = inheritNullLayerTransform(result, parentEffects)
+      parentId = parent.parentClipId
+    }
+    return result
+  }
+  const selectedEffects = selectedClip ? getClipEffects(selectedClip) : DEFAULT_CLIP_EFFECTS
   const updateEffect = (patch: Partial<ClipEffects>) => {
     const existingKeys = selectedClip?.keyframes ?? []
     let updatedKeyframe = false
@@ -237,6 +254,7 @@ function Editor() {
         enabled: clip.enabled,
         ...(clip.effects ? { effects: clip.effects } : {}),
         ...(clip.keyframes?.length ? { keyframes: clip.keyframes } : {}),
+        ...(clip.parentClipId ? { parentClipId: clip.parentClipId } : {}),
       })),
     })),
     playheadFrame: secondsToFrames(playhead, projectFrameRate),
@@ -261,7 +279,7 @@ function Editor() {
       const media = videoElementsRef.current.get(clip.id)
       if (!media) continue
       const sourceTime = clip.sourceIn + Math.max(0, playhead - clip.start)
-      const effects = evaluateClipEffects(clip.effects ?? DEFAULT_CLIP_EFFECTS, clip.keyframes, secondsToFrames(Math.max(0, playhead - clip.start), projectFrameRate))
+      const effects = getClipEffects(clip)
       media.volume = Math.min(1, Math.max(0, effects.volume / 100))
       if (!playing && Number.isFinite(sourceTime) && Math.abs(media.currentTime - sourceTime) > 0.04) {
         try { media.currentTime = sourceTime } catch { /* metadata may not be ready yet */ }
@@ -284,7 +302,7 @@ function Editor() {
         continue
       }
       const sourceTime = clip.sourceIn + Math.max(0, playhead - clip.start)
-      const effects = evaluateClipEffects(clip.effects ?? DEFAULT_CLIP_EFFECTS, clip.keyframes, secondsToFrames(Math.max(0, playhead - clip.start), projectFrameRate))
+      const effects = getClipEffects(clip)
       media.volume = Math.min(1, Math.max(0, effects.volume / 100))
       if (Math.abs(media.currentTime - sourceTime) > 0.25) {
         try { media.currentTime = sourceTime } catch { /* metadata may not be ready yet */ }
@@ -448,6 +466,18 @@ function Editor() {
     const number = tracks.filter((track) => track.kind === kind).length + 1
     setTracks((current) => [...current, { id: createId(), name: `${prefix}${number}`, kind, clips: [], muted: false, locked: false }])
   }
+  const createNullLayer = () => {
+    const asset: MediaAsset = { id: createId(), name: `Null Controller ${assets.filter((item) => item.kind === 'null').length + 1}`, kind: 'null', url: '', size: 0, duration: 30, durationKnown: true, mimeType: 'application/x-kyrocut-null' }
+    const existing = tracks.find((track) => track.kind === 'adjustment' && !track.locked)
+    const target = existing ?? { id: createId(), name: `ADJ${tracks.filter((track) => track.kind === 'adjustment').length + 1}`, kind: 'adjustment' as const, clips: [], muted: false, locked: false }
+    const clip: TimelineClip = { id: createId(), mediaId: asset.id, start: playhead, sourceIn: 0, duration: 30, enabled: true, effects: { ...DEFAULT_CLIP_EFFECTS } }
+    setAssets((current) => [...current, asset])
+    if (!existing) setTracks((current) => [...current, target])
+    setTracks((current) => current.map((track) => track.id === target.id ? { ...track, clips: [...track.clips, clip].sort((a, b) => a.start - b.start) } : track))
+    setSelectedClipId(clip.id)
+    setActiveTab('effects')
+    setNotice(`Created ${asset.name}. Parent visual layers to it in the Inspector.`)
+  }
 
   const createTextLayer = async () => {
     const text = titleText.trim()
@@ -589,7 +619,7 @@ function Editor() {
             ? videoElementsRef.current.get(clip.id)
             : asset?.kind === 'image' ? imageElementsRef.current.get(clip.id) : undefined
           if (!source) return []
-          const effects = evaluateClipEffects(clip.effects ?? DEFAULT_CLIP_EFFECTS, clip.keyframes, secondsToFrames(Math.max(0, playhead - clip.start), projectFrameRate))
+          const effects = getClipEffects(clip)
           return [{ id: clip.id, source, effects }]
         })
       gpuCompositorRef.current.render(canvas.width, canvas.height, layers)
@@ -615,7 +645,7 @@ function Editor() {
       const scale = Math.min(canvas.width / width, canvas.height / height)
       const drawWidth = width * scale
       const drawHeight = height * scale
-      const effects = evaluateClipEffects(clip.effects ?? DEFAULT_CLIP_EFFECTS, clip.keyframes, secondsToFrames(Math.max(0, playhead - clip.start), projectFrameRate))
+      const effects = getClipEffects(clip)
       context.save()
       context.globalAlpha = effects.opacity / 100
       context.globalCompositeOperation = effects.blendMode === 'add' ? 'lighter' : effects.blendMode === 'normal' ? 'source-over' : effects.blendMode
@@ -663,6 +693,7 @@ function Editor() {
       const bundledMedia = new Map<string, Blob>()
       let unavailable = 0
       for (const asset of assets) {
+        if (asset.kind === 'null') continue
         let blob = await getMediaBlob(asset.id).catch(() => null)
         if (!blob && asset.url) {
           try {
@@ -721,7 +752,7 @@ function Editor() {
           duration: framesToSeconds(asset.durationFrames ?? 0, frameRate),
           durationKnown: asset.durationFrames !== null,
           mimeType: blob?.type ?? asset.mimeType ?? '',
-          missing: !blob,
+          missing: asset.kind !== 'null' && !blob,
         }
       }))
       setProjectFrameRate(frameRate)
@@ -736,7 +767,7 @@ function Editor() {
       setPlayhead(framesToSeconds(manifest.playheadFrame ?? 0, frameRate))
       setSelectedClipId(null)
       setPlaying(false)
-      const offline = restoredAssets.filter((asset) => !asset.url).length
+      const offline = restoredAssets.filter((asset) => asset.kind !== 'null' && !asset.url).length
       setNotice(archived
         ? offline
           ? `Opened portable project with ${bundledMedia.size} bundled media file(s). ${offline} source(s) still need relinking.`
@@ -927,7 +958,7 @@ function Editor() {
             <div className="kx-preview-stage">
               {activeVisualClips.length > 0 ? [...activeVisualClips].reverse().map(({ clip }) => {
                 const asset = assets.find((item) => item.id === clip.mediaId)
-                const effects = evaluateClipEffects(clip.effects ?? DEFAULT_CLIP_EFFECTS, clip.keyframes, secondsToFrames(Math.max(0, playhead - clip.start), projectFrameRate))
+                const effects = getClipEffects(clip)
                 const filter = `brightness(${effects.brightness}%) contrast(${effects.contrast}%) saturate(${effects.saturation}%) blur(${effects.blur}px) grayscale(${effects.grayscale}%) sepia(${effects.sepia}%) hue-rotate(${effects.hueRotate}deg)`
                 if (!asset?.url) return <div className="kx-preview-offline" key={clip.id}><FolderOpen size={20} /> {asset?.name ?? 'MEDIA OFFLINE'} — RELINK SOURCE</div>
                 const layerIndex = activeVisualClips.findIndex((item) => item.clip.id === clip.id)
@@ -958,6 +989,7 @@ function Editor() {
                 <button onClick={() => addTrack('video')} title="Add video track"><Plus size={14} /> Video</button>
                 <button onClick={() => addTrack('audio')} title="Add audio track"><Plus size={14} /> Audio</button>
                 <button onClick={() => addTrack('graphics')} title="Add graphics track"><Plus size={14} /> Graphics</button>
+                <button onClick={createNullLayer} title="Create an invisible transform controller"><Plus size={14} /> Null</button>
                 <button className="kx-icon-button" title="Timeline options" onClick={() => setNotice(`Timeline options: frame-accurate editing is enabled at ${formatFrameRate(projectFrameRate)}.`)}><ChevronDown size={15} /></button>
               </div>
             </div>
@@ -976,7 +1008,7 @@ function Editor() {
                     const asset = assets.find((item) => item.id === clip.mediaId)
                     return <button key={clip.id} draggable={!track.locked} onDragStart={(event) => { event.dataTransfer.setData('application/x-kyrocut-clip', clip.id); event.dataTransfer.effectAllowed = 'move' }} className={`kx-clip ${track.kind} ${selectedClipId === clip.id ? 'selected' : ''} ${clip.enabled ? '' : 'disabled'}`} style={{ left: `${clip.start * 12}px`, width: `${Math.max(48, clip.duration * 12)}px` }} onClick={() => { setSelectedClipId(clip.id); setPlayhead(clip.start) }} title={asset?.name ?? 'Missing media'}>
                       {!track.locked && <span className="kx-trim-handle left" role="presentation" onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); setTrimDrag({ clipId: clip.id, trackId: track.id, edge: 'left', startX: event.clientX, start: clip.start, sourceIn: clip.sourceIn, duration: clip.duration }) }} />}
-                      <span className="kx-clip-wave">{track.kind === 'audio' ? '▂▅▃▇▂▆▃▅▂▇▃▅' : '▥ ▥ ▥ ▥ ▥ ▥'}</span><strong>{asset?.name ?? 'Offline media'}</strong>
+                      <span className="kx-clip-wave">{asset?.kind === 'null' ? '◇ NULL CONTROLLER' : track.kind === 'audio' ? '▂▅▃▇▂▆▃▅▂▇▃▅' : '▥ ▥ ▥ ▥ ▥ ▥'}</span><strong>{asset?.name ?? 'Offline media'}</strong>
                       {clip.keyframes?.map((keyframe, index) => <span key={`${keyframe.property}-${keyframe.frame}-${index}`} className="kx-keyframe-marker" style={{ left: `${framesToSeconds(keyframe.frame, projectFrameRate) * 12}px` }} title={`${keyframe.property} · frame ${keyframe.frame}`} aria-hidden="true">◆</span>)}
                       {!track.locked && <span className="kx-trim-handle right" role="presentation" onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); setTrimDrag({ clipId: clip.id, trackId: track.id, edge: 'right', startX: event.clientX, start: clip.start, sourceIn: clip.sourceIn, duration: clip.duration }) }} />}
                     </button>
@@ -993,8 +1025,10 @@ function Editor() {
         <aside className="kx-panel kx-inspector">
           <div className="kx-panel-title"><span>INSPECTOR</span><Settings2 size={15} /></div>
           {selectedClip && selectedAsset ? <div className="kx-inspector-content">
-            <div className="kx-inspector-file"><span className={`kx-asset-icon ${selectedAsset.kind}`}>{selectedAsset.kind === 'video' ? <Film size={17} /> : selectedAsset.kind === 'audio' ? <Music2 size={17} /> : <ImagePlus size={17} />}</span><div><strong>{selectedAsset.name}</strong><small>{selectedAsset.kind.toUpperCase()} SOURCE</small></div></div>
+            <div className="kx-inspector-file"><span className={`kx-asset-icon ${selectedAsset.kind}`}>{selectedAsset.kind === 'video' ? <Film size={17} /> : selectedAsset.kind === 'audio' ? <Music2 size={17} /> : selectedAsset.kind === 'null' ? <Layers3 size={17} /> : <ImagePlus size={17} />}</span><div><strong>{selectedAsset.name}</strong><small>{selectedAsset.kind.toUpperCase()} SOURCE</small></div></div>
             <div className="kx-section-label">TRANSFORM / TIMING</div>
+            {selectedAsset.kind !== 'null' && <label className="kx-field"><span>Parent null layer</span><select value={selectedClip.parentClipId ?? ''} onChange={(event) => updateSelectedClip({ parentClipId: event.target.value || undefined })}><option value="">No parent</option>{allClips.filter((candidate) => candidate.id !== selectedClip.id && assets.some((asset) => asset.id === candidate.mediaId && asset.kind === 'null')).map((candidate) => <option key={candidate.id} value={candidate.id}>{assets.find((asset) => asset.id === candidate.mediaId)?.name ?? 'Null layer'}</option>)}</select></label>}
+            {selectedAsset.kind === 'null' && <p className="kx-effect-note">Invisible controller. Animate its transform, then parent visual layers to it to move them together.</p>}
             <label className="kx-field"><span>Timeline start (s)</span><input type="number" min="0" step={framesToSeconds(1, projectFrameRate)} value={selectedClip.start.toFixed(2)} onChange={(event) => updateSelectedClip({ start: Number(event.target.value) })} /></label>
             <label className="kx-field"><span>Source in (s)</span><input type="number" min="0" step={framesToSeconds(1, projectFrameRate)} value={selectedClip.sourceIn.toFixed(2)} onChange={(event) => updateSelectedClip({ sourceIn: Number(event.target.value) })} /></label>
             <label className="kx-field"><span>Duration (s)</span><input type="number" min="0.03" step={framesToSeconds(1, projectFrameRate)} value={selectedClip.duration.toFixed(2)} onChange={(event) => updateSelectedClip({ duration: Number(event.target.value) })} /></label>
