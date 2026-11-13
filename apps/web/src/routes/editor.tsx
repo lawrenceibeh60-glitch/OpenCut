@@ -204,7 +204,7 @@ function Editor() {
     }
     return result
   }
-  const selectedEffects = selectedClip ? getClipEffects(selectedClip) : DEFAULT_CLIP_EFFECTS
+  const selectedEffects = evaluateClipEffects(selectedBaseEffects, selectedClip?.keyframes, selectedFrame)
   const updateEffect = (patch: Partial<ClipEffects>) => {
     const existingKeys = selectedClip?.keyframes ?? []
     let updatedKeyframe = false
@@ -1031,7 +1031,7 @@ function Editor() {
           {selectedClip && selectedAsset ? <div className="kx-inspector-content">
             <div className="kx-inspector-file"><span className={`kx-asset-icon ${selectedAsset.kind}`}>{selectedAsset.kind === 'video' ? <Film size={17} /> : selectedAsset.kind === 'audio' ? <Music2 size={17} /> : selectedAsset.kind === 'null' ? <Layers3 size={17} /> : <ImagePlus size={17} />}</span><div><strong>{selectedAsset.name}</strong><small>{selectedAsset.kind.toUpperCase()} SOURCE</small></div></div>
             <div className="kx-section-label">TRANSFORM / TIMING</div>
-            {selectedAsset.kind !== 'null' && <label className="kx-field"><span>Parent null layer</span><select value={selectedClip.parentClipId ?? ''} onChange={(event) => updateSelectedClip({ parentClipId: event.target.value || undefined })}><option value="">No parent</option>{allClips.filter((candidate) => candidate.id !== selectedClip.id && assets.some((asset) => asset.id === candidate.mediaId && asset.kind === 'null')).map((candidate) => <option key={candidate.id} value={candidate.id}>{assets.find((asset) => asset.id === candidate.mediaId)?.name ?? 'Null layer'}</option>)}</select></label>}
+            {(selectedAsset.kind === 'video' || selectedAsset.kind === 'image') && <label className="kx-field"><span>Parent null layer</span><select value={selectedClip.parentClipId ?? ''} onChange={(event) => updateSelectedClip({ parentClipId: event.target.value || undefined })}><option value="">No parent</option>{allClips.filter((candidate) => candidate.id !== selectedClip.id && assets.some((asset) => asset.id === candidate.mediaId && asset.kind === 'null')).map((candidate) => <option key={candidate.id} value={candidate.id}>{assets.find((asset) => asset.id === candidate.mediaId)?.name ?? 'Null layer'}</option>)}</select></label>}
             {selectedAsset.kind === 'null' && <p className="kx-effect-note">Invisible controller. Animate its transform, then parent visual layers to it to move them together.</p>}
             <label className="kx-field"><span>Timeline start (s)</span><input type="number" min="0" step={framesToSeconds(1, projectFrameRate)} value={selectedClip.start.toFixed(2)} onChange={(event) => updateSelectedClip({ start: Number(event.target.value) })} /></label>
             <label className="kx-field"><span>Source in (s)</span><input type="number" min="0" step={framesToSeconds(1, projectFrameRate)} value={selectedClip.sourceIn.toFixed(2)} onChange={(event) => updateSelectedClip({ sourceIn: Number(event.target.value) })} /></label>
