@@ -30,7 +30,7 @@ const formatTime = (seconds: number, rate: RationalFrameRate = SEQUENCE_FRAME_RA
 }
 const mediaKind = (file: File): MediaKind | null => file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('image/') ? 'image' : null
 const formatFrameRate = (rate: RationalFrameRate) => `${Number((rate.numerator / rate.denominator).toFixed(3))} FPS`
-const DEFAULT_CLIP_EFFECTS: ClipEffects = { brightness: 100, contrast: 100, saturation: 100, blur: 0, grayscale: 0, sepia: 0, hueRotate: 0, opacity: 100, positionX: 0, positionY: 0, scaleX: 1, scaleY: 1, rotation: 0 }
+const DEFAULT_CLIP_EFFECTS: ClipEffects = { blendMode: 'normal', brightness: 100, contrast: 100, saturation: 100, blur: 0, grayscale: 0, sepia: 0, hueRotate: 0, opacity: 100, positionX: 0, positionY: 0, scaleX: 1, scaleY: 1, rotation: 0 }
 
 function Editor() {
   const [assets, setAssets] = useState<MediaAsset[]>([])
@@ -539,6 +539,7 @@ function Editor() {
       const effects = evaluateClipEffects(clip.effects ?? DEFAULT_CLIP_EFFECTS, clip.keyframes, secondsToFrames(Math.max(0, playhead - clip.start), projectFrameRate))
       context.save()
       context.globalAlpha = effects.opacity / 100
+      context.globalCompositeOperation = effects.blendMode === 'add' ? 'lighter' : effects.blendMode
       context.filter = `brightness(${effects.brightness}%) contrast(${effects.contrast}%) saturate(${effects.saturation}%) blur(${effects.blur}px) grayscale(${effects.grayscale}%) sepia(${effects.sepia}%) hue-rotate(${effects.hueRotate}deg)`
       context.translate(canvas.width / 2 + canvas.width * effects.positionX / 100, canvas.height / 2 + canvas.height * effects.positionY / 100)
       context.rotate(effects.rotation * Math.PI / 180)
@@ -791,6 +792,7 @@ function Editor() {
               <label className="kx-field"><span>Sepia · {selectedEffects.sepia}%</span><input type="range" min="0" max="100" value={selectedEffects.sepia} onChange={(event) => updateEffect({ sepia: Number(event.target.value) })} /></label>
               <label className="kx-field"><span>Hue rotation · {selectedEffects.hueRotate}°</span><input type="range" min="0" max="360" value={selectedEffects.hueRotate} onChange={(event) => updateEffect({ hueRotate: Number(event.target.value) })} /></label>
               <label className="kx-field"><span>Opacity · {selectedEffects.opacity}% <button type="button" className="kx-keyframe-button" title="Add or update opacity keyframe" onClick={() => addKeyframe('opacity')}>{selectedClip.keyframes?.some((keyframe) => keyframe.frame === selectedFrame && keyframe.property === 'opacity') ? '◆' : '◇'}</button></span><input type="range" min="0" max="100" value={selectedEffects.opacity} onChange={(event) => updateEffect({ opacity: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Blend mode</span><select value={selectedEffects.blendMode} onChange={(event) => updateEffect({ blendMode: event.target.value as ClipEffects['blendMode'] })}><option value="normal">Normal</option><option value="multiply">Multiply</option><option value="screen">Screen</option><option value="add">Add</option></select></label>
               <div className="kx-section-label">TRANSFORM</div>
               <label className="kx-field"><span>Position X · {selectedEffects.positionX}% <button type="button" className="kx-keyframe-button" title="Add or update positionX keyframe" onClick={() => addKeyframe('positionX')}>{selectedClip.keyframes?.some((keyframe) => keyframe.frame === selectedFrame && keyframe.property === 'positionX') ? '◆' : '◇'}</button></span><input type="range" min="-100" max="100" value={selectedEffects.positionX} onChange={(event) => updateEffect({ positionX: Number(event.target.value) })} /></label>
               <label className="kx-field"><span>Position Y · {selectedEffects.positionY}% <button type="button" className="kx-keyframe-button" title="Add or update positionY keyframe" onClick={() => addKeyframe('positionY')}>{selectedClip.keyframes?.some((keyframe) => keyframe.frame === selectedFrame && keyframe.property === 'positionY') ? '◆' : '◇'}</button></span><input type="range" min="-100" max="100" value={selectedEffects.positionY} onChange={(event) => updateEffect({ positionY: Number(event.target.value) })} /></label>
@@ -826,7 +828,7 @@ function Editor() {
                 if (!asset?.url) return <div className="kx-preview-offline" key={clip.id}><FolderOpen size={20} /> {asset?.name ?? 'MEDIA OFFLINE'} — RELINK SOURCE</div>
                 const layerIndex = activeVisualClips.findIndex((item) => item.clip.id === clip.id)
                 return asset.kind === 'video'
-                  ? <video key={clip.id} className="kx-composition-layer" ref={(element) => { if (element) videoElementsRef.current.set(clip.id, element); else videoElementsRef.current.delete(clip.id) }} src={asset.url} style={{ filter, opacity: effects.opacity / 100, transform: `translate(${effects.positionX}%, ${effects.positionY}%) scale(${effects.scaleX}, ${effects.scaleY}) rotate(${effects.rotation}deg)`, zIndex: activeVisualClips.length - layerIndex }} muted={layerIndex !== 0} playsInline preload="auto" />
+                  ? <video key={clip.id} className="kx-composition-layer" ref={(element) => { if (element) videoElementsRef.current.set(clip.id, element); else videoElementsRef.current.delete(clip.id) }} src={asset.url} style={{ filter, opacity: effects.opacity / 100, transform: `translate(${effects.positionX}%, ${effects.positionY}%) scale(${effects.scaleX}, ${effects.scaleY}) rotate(${effects.rotation}deg)`, mixBlendMode: effects.blendMode === 'add' ? 'plus-lighter' : effects.blendMode, zIndex: activeVisualClips.length - layerIndex }} muted={layerIndex !== 0} playsInline preload="auto" />
                   : <img key={clip.id} className="kx-composition-layer" ref={(element) => { if (element) imageElementsRef.current.set(clip.id, element); else imageElementsRef.current.delete(clip.id) }} src={asset.url} alt={asset.name} style={{ filter, opacity: effects.opacity / 100, transform: `translate(${effects.positionX}%, ${effects.positionY}%) scale(${effects.scaleX}, ${effects.scaleY}) rotate(${effects.rotation}deg)`, zIndex: activeVisualClips.length - layerIndex }} />
               }) : activeAudioClips.length > 0 ? <div className="kx-audio-preview"><AudioLines size={54} /><strong>{activeAudioClips.map(({ clip }) => assets.find((asset) => asset.id === clip.mediaId)?.name ?? 'Audio').join(' + ')}</strong><span>Timeline audio mix</span></div> :
                 selectedAsset && !selectedAsset.url ? <div className="kx-preview-empty"><FolderOpen size={30} /><strong>MEDIA OFFLINE</strong><span>RELINK THE SOURCE FILE TO PREVIEW</span></div> :
