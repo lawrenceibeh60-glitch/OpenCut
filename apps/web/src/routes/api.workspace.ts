@@ -9,6 +9,7 @@ type WorkspaceAction =
 
 const SESSION_TTL_MINUTES = 45
 const MAX_MANIFEST_BYTES = 5 * 1024 * 1024
+let bucketCorsConfigured = false
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), {
   status,
   headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
@@ -67,6 +68,24 @@ async function s3Client() {
   return { client, getSignedUrl, bucket: process.env.S3_BUCKET }
 }
 
+async function ensureBucketCors(client: import('@aws-sdk/client-s3').S3Client, bucket: string) {
+  if (bucketCorsConfigured) return
+  const { PutBucketCorsCommand } = await import('@aws-sdk/client-s3')
+  await client.send(new PutBucketCorsCommand({
+    Bucket: bucket,
+    CORSConfiguration: {
+      CORSRules: [{
+        AllowedOrigins: ['https://kyrocut-x1-web.onrender.com', 'http://localhost:5173'],
+        AllowedMethods: ['GET', 'PUT', 'HEAD'],
+        AllowedHeaders: ['*'],
+        ExposeHeaders: ['ETag'],
+        MaxAgeSeconds: 3600,
+      }],
+    },
+  }))
+  bucketCorsConfigured = true
+}
+
 async function deleteSessionObjects(sessionHash: string) {
   try {
     const { client, bucket } = await s3Client()
@@ -115,7 +134,7 @@ async function handlePost(request: Request) {
       const token = `${crypto.randomUUID().replaceAll('-', '')}${crypto.randomUUID().replaceAll('-', '')}`
       const sessionHash = await hashToken(token)
       await sql`INSERT INTO kyrocut_workspace_sessions (session_hash, manifest, expires_at)
-        VALUES (${sessionHash}, '{}'::jsonb, now() + (${SESSION_TTL_MINUTES} || ' minutes')::interval)`
+        VALUES (${sessionHash}, '{}'::jsonb, now() + interval '45 minutes')`
       return json({ token, expiresInSeconds: SESSION_TTL_MINUTES * 60 })
     }
 
@@ -144,6 +163,7 @@ async function handlePost(request: Request) {
         return json({ error: 'Invalid media asset metadata.' }, 400)
       }
       const { client, getSignedUrl, bucket } = await s3Client()
+      await ensureBucketCors(client, bucket)
       const { PutObjectCommand } = await import('@aws-sdk/client-s3')
       const safeName = body.name.replace(/[\\/\x00-\x1f]/g, '_').slice(0, 180) || 'media.bin'
       const key = `sessions/${sessionHash}/media/${body.assetId}/${safeName}`
