@@ -11,6 +11,7 @@ export type ClipKeyframe = {
 }
 
 export type ClipEffects = {
+  blendMode: 'normal' | 'multiply' | 'screen' | 'add'
   brightness: number
   contrast: number
   saturation: number
@@ -178,6 +179,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
       }
       const effectsValue = clip.effects === undefined ? undefined : record(clip.effects, 'Clip effects')
       const effects: ClipEffects | undefined = effectsValue ? {
+        blendMode: effectsValue.blendMode === undefined ? 'normal' : effectsValue.blendMode as ClipEffects['blendMode'],
         brightness: boundedNumber(effectsValue.brightness, 'Effect brightness', 0, 200, 100),
         contrast: boundedNumber(effectsValue.contrast, 'Effect contrast', 0, 200, 100),
         saturation: boundedNumber(effectsValue.saturation, 'Effect saturation', 0, 200, 100),
@@ -192,6 +194,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
         scaleY: boundedNumber(effectsValue.scaleY, 'Effect scale Y', 0.1, 5, 1),
         rotation: boundedNumber(effectsValue.rotation, 'Effect rotation', -180, 180, 0),
       } : undefined
+      if (effects && !['normal', 'multiply', 'screen', 'add'].includes(effects.blendMode)) throw new Error('Unsupported clip blend mode')
       if (clip.keyframes !== undefined && !Array.isArray(clip.keyframes)) {
         throw new Error('Clip keyframes must be an array')
       }
