@@ -61,12 +61,29 @@ describe('KYROCUT X1 project manifest', () => {
         ...validProject.tracks[0],
         clips: [{
           ...validProject.tracks[0].clips[0],
-          effects: { brightness: 125, contrast: 90, saturation: 140, blur: 2.5, grayscale: 0, sepia: 15, hueRotate: 210, opacity: 80 },
+          effects: { brightness: 125, contrast: 90, saturation: 140, blur: 2.5, grayscale: 0, sepia: 15, hueRotate: 210, opacity: 80, positionX: 12, positionY: -8, scaleX: 1.5, scaleY: 0.75, rotation: 45 },
         }],
       }],
     }
     const parsed = parseProjectManifest(JSON.stringify(withEffects))
     expect(parsed.tracks[0].clips[0].effects).toEqual(withEffects.tracks[0].clips[0].effects)
+  })
+
+  it('fills transform defaults when opening older projects with legacy effect fields', () => {
+    const legacy = {
+      ...validProject,
+      tracks: [{
+        ...validProject.tracks[0],
+        clips: [{
+          ...validProject.tracks[0].clips[0],
+          effects: { brightness: 100, contrast: 100, saturation: 100, blur: 0, grayscale: 0, sepia: 0, hueRotate: 0, opacity: 100 },
+        }],
+      }],
+    }
+    const parsed = parseProjectManifest(JSON.stringify(legacy))
+    expect(parsed.tracks[0].clips[0].effects).toMatchObject({
+      positionX: 0, positionY: 0, scaleX: 1, scaleY: 1, rotation: 0,
+    })
   })
 
   it('rejects out-of-range clip effect values', () => {
