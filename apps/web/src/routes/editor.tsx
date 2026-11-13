@@ -131,7 +131,6 @@ function Editor() {
   const selectedTrack = tracks.find((track) => track.clips.some((clip) => clip.id === selectedClipId))
   const missingAssets = assets.filter((asset) => !asset.url)
   const selectedEffects = selectedClip?.effects ?? DEFAULT_CLIP_EFFECTS
-  const previewFilter = `brightness(${selectedEffects.brightness}%) contrast(${selectedEffects.contrast}%) saturate(${selectedEffects.saturation}%) blur(${selectedEffects.blur}px) grayscale(${selectedEffects.grayscale}%) sepia(${selectedEffects.sepia}%) hue-rotate(${selectedEffects.hueRotate}deg)`
   const updateEffect = (patch: Partial<ClipEffects>) => updateSelectedClip({ effects: { ...selectedEffects, ...patch } })
 
   const projectDocument = useMemo(() => ({
@@ -626,7 +625,7 @@ function Editor() {
                 if (!asset?.url) return <div className="kx-preview-offline" key={clip.id}><FolderOpen size={20} /> {asset?.name ?? 'MEDIA OFFLINE'} — RELINK SOURCE</div>
                 const layerIndex = activeVisualClips.findIndex((item) => item.clip.id === clip.id)
                 return asset.kind === 'video'
-                  ? <video key={clip.id} className="kx-composition-layer" ref={(element) => { if (element) videoElementsRef.current.set(clip.id, element); else videoElementsRef.current.delete(clip.id) }} src={asset.url} style={{ filter, opacity: effects.opacity / 100, zIndex: 1 + layerIndex }} muted playsInline preload="auto" />
+                  ? <video key={clip.id} className="kx-composition-layer" ref={(element) => { if (element) videoElementsRef.current.set(clip.id, element); else videoElementsRef.current.delete(clip.id) }} src={asset.url} style={{ filter, opacity: effects.opacity / 100, zIndex: activeVisualClips.length - layerIndex }} muted playsInline preload="auto" />
                   : <img key={clip.id} className="kx-composition-layer" src={asset.url} alt={asset.name} style={{ filter, opacity: effects.opacity / 100, zIndex: 1 + layerIndex }} />
               }) : activeAudioClips.length > 0 ? <div className="kx-audio-preview"><AudioLines size={54} /><strong>{activeAudioClips.map(({ clip }) => assets.find((asset) => asset.id === clip.mediaId)?.name ?? 'Audio').join(' + ')}</strong><span>Timeline audio mix</span></div> :
                 selectedAsset && !selectedAsset.url ? <div className="kx-preview-empty"><FolderOpen size={30} /><strong>MEDIA OFFLINE</strong><span>RELINK THE SOURCE FILE TO PREVIEW</span></div> :
