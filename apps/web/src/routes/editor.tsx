@@ -410,7 +410,7 @@ function Editor() {
     }
     setAssets((current) => [...current, ...additions])
     setNotice(storageFailures
-      ? `Imported ${additions.length} media item(s), but browser storage could not retain ${storageFailures} file(s). Keep those originals safe.`
+      ? `Imported ${additions.length} media item(s), but temporary cloud storage could not confirm ${storageFailures} file(s). Keep those originals safe.`
       : `Imported ${additions.length} media item(s) and kept them in this temporary session.`)
   }, [])
 
@@ -955,7 +955,7 @@ function Editor() {
     if (updates.size) {
       setAssets((current) => current.map((item) => updates.get(item.id) ?? item))
       setNotice(storageFailures
-        ? 'Relinked ' + updates.size + ' media item(s), but browser storage could not save ' + storageFailures + ' file(s).'
+        ? 'Relinked ' + updates.size + ' media item(s), but temporary cloud storage could not confirm ' + storageFailures + ' file(s).'
         : 'Relinked ' + updates.size + ' media item(s) in this temporary session.')
     } else {
       setNotice('No matching filenames found. Rename the source files or import them individually.')
@@ -1018,7 +1018,7 @@ function Editor() {
           <input ref={projectInput} hidden type="file" accept=".kcx1,application/json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openProject(file); event.target.value = '' }} />
           <button className="kx-button kx-button-quiet" onClick={saveProject}><Save size={15} /> Export Draft</button>
           <label className="kx-export-format"><span>FORMAT</span><select aria-label="Export format" value={exportFormat} onChange={(event) => setExportFormat(event.target.value as 'webm' | 'mp4')} disabled={isExporting}><option value="mp4">MP4 · H.264/AAC</option><option value="webm">WebM · VP9/Opus</option></select></label>
-          <button className="kx-button kx-button-primary" onClick={() => isExporting ? recorderRef.current?.stop() : startExport()}><Sparkles size={15} /> {isExporting ? 'Stop export' : 'Export ' + exportFormat.toUpperCase()}</button>
+          <button className="kx-button kx-button-primary" onClick={() => isExporting ? recorderRef.current?.stop() : startExport()}><Sparkles size={15} /> {isExporting ? 'Stop export' : 'Export Video'}</button>
         </div>
       </header>
       <div className="kx-session-warning" role="note">TEMPORARY WORKSPACE · Refreshing or leaving clears this session. Export Draft to keep an editable copy.</div>
