@@ -44,6 +44,7 @@ function Editor() {
   const [activeTab, setActiveTab] = useState<'media' | 'effects' | 'text'>('media')
   const [titleText, setTitleText] = useState('YOUR TITLE')
   const [shapeColor, setShapeColor] = useState('#d6ad5c')
+  const [isExporting, setIsExporting] = useState(false)
   const [projectName, setProjectName] = useState('Untitled project')
   const [projectId, setProjectId] = useState<string>(createId())
   const [projectFrameRate, setProjectFrameRate] = useState<RationalFrameRate>(SEQUENCE_FRAME_RATE)
@@ -55,6 +56,10 @@ function Editor() {
   const relinkInput = useRef<HTMLInputElement>(null)
   const videoElementsRef = useRef(new Map<string, HTMLVideoElement>())
   const audioElementsRef = useRef(new Map<string, HTMLAudioElement>())
+  const imageElementsRef = useRef(new Map<string, HTMLImageElement>())
+  const exportCanvasRef = useRef<HTMLCanvasElement>(null)
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const recordingChunksRef = useRef<Blob[]>([])
   const objectUrls = useRef<string[]>([])
   useEffect(() => () => objectUrls.current.forEach((url) => URL.revokeObjectURL(url)), [])
 
@@ -202,15 +207,17 @@ function Editor() {
     }
   }, [activeAudioClips, audioTimelineClips, playhead, playing])
 
+  const timelineDuration = Math.max(0, ...allClips.filter((clip) => clip.enabled).map((clip) => clip.start + clip.duration))
   useEffect(() => {
     if (!playing) return
+    if (timelineDuration <= playhead) { setPlaying(false); return }
     let request = 0
     const startedAt = performance.now()
     const startTime = playhead
     const tick = (now: number) => {
-      const next = clampTimelineTime(startTime + (now - startedAt) / 1000, projectDuration)
+      const next = clampTimelineTime(startTime + (now - startedAt) / 1000, timelineDuration)
       setPlayhead(next)
-      if (next >= projectDuration) {
+      if (next >= timelineDuration) {
         setPlaying(false)
         return
       }
@@ -218,7 +225,7 @@ function Editor() {
     }
     request = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(request)
-  }, [playing, projectDuration])
+  }, [playing, timelineDuration])
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
     const accepted = Array.from(files).filter((file) => mediaKind(file))
@@ -390,6 +397,110 @@ function Editor() {
       setNotice(error instanceof Error ? 'Could not save title layer: ' + error.message : 'Could not save title layer')
     }
   }
+  const startExport = () => {
+    const canvas = exportCanvasRef.current
+    if (!canvas || timelineDuration <= 0) { setNotice('Add at least one enabled clip before exporting'); return }
+    if (typeof MediaRecorder === 'undefined' || typeof canvas.captureStream !== 'function') {
+      setNotice('This browser does not support WebM recording. Use a current desktop Chrome or Edge browser.')
+      return
+    }
+    if (recorderRef.current?.state === 'recording') return
+    canvas.width = projectResolution.width
+    canvas.height = projectResolution.height
+    const fps = Math.min(60, Math.max(1, projectFrameRate.numerator / projectFrameRate.denominator))
+    const stream = canvas.captureStream(fps)
+    const audioSources: Array<HTMLAudioElement | HTMLVideoElement> = [
+      ...audioTimelineClips.map((clip) => audioElementsRef.current.get(clip.id)).filter((item): item is HTMLAudioElement => Boolean(item)),
+      ...activeVisualClips.map(({ clip }) => videoElementsRef.current.get(clip.id)).filter((item): item is HTMLVideoElement => Boolean(item)),
+    ]
+    const capturedAudio = new Set<string>()
+    for (const source of audioSources) {
+      const capturable = source as (HTMLAudioElement | HTMLVideoElement) & { captureStream?: () => MediaStream }
+      const audioStream = capturable.captureStream?.()
+      for (const track of audioStream?.getAudioTracks() ?? []) {
+        if (!capturedAudio.has(track.id)) {
+          stream.addTrack(track)
+          capturedAudio.add(track.id)
+        }
+      }
+    }
+    const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+      .find((type) => MediaRecorder.isTypeSupported(type))
+    let recorder: MediaRecorder
+    try {
+      recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+    } catch (error) {
+      stream.getTracks().forEach((track) => track.stop())
+      setNotice(error instanceof Error ? 'Could not start export: ' + error.message : 'Could not start browser export')
+      return
+    }
+    recordingChunksRef.current = []
+    recorder.ondataavailable = (event) => { if (event.data.size > 0) recordingChunksRef.current.push(event.data) }
+    recorder.onerror = () => {
+      setNotice('Browser export failed while recording. Try a shorter sequence or lower resolution.')
+      setIsExporting(false)
+      setPlaying(false)
+    }
+    recorder.onstop = () => {
+      const blob = new Blob(recordingChunksRef.current, { type: recorder.mimeType || 'video/webm' })
+      recordingChunksRef.current = []
+      stream.getTracks().forEach((track) => track.stop())
+      recorderRef.current = null
+      setIsExporting(false)
+      setPlaying(false)
+      if (!blob.size) { setNotice('Export produced an empty file. Check that your browser can decode the source media.'); return }
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = (projectName.trim().replace(/[^a-z0-9-_]+/gi, '-').toLowerCase() || 'kyrocut-export') + '.webm'
+      link.click()
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
+      setNotice('WebM export complete · ' + (blob.size / (1024 * 1024)).toFixed(1) + ' MB')
+    }
+    recorderRef.current = recorder
+    setPlayhead(0)
+    setIsExporting(true)
+    setPlaying(true)
+    recorder.start(250)
+    setNotice('Recording composition to WebM…')
+  }
+
+  useEffect(() => {
+    if (isExporting && !playing && recorderRef.current?.state === 'recording') recorderRef.current.stop()
+  }, [isExporting, playing])
+
+  useEffect(() => {
+    if (!isExporting) return
+    const canvas = exportCanvasRef.current
+    const context = canvas?.getContext('2d')
+    if (!canvas || !context) return
+    context.fillStyle = '#000000'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    const layers = [...getActivePlaybackClips(tracks, playhead)]
+      .filter(({ track }) => track.kind === 'video' || track.kind === 'graphics')
+      .reverse()
+    for (const { clip } of layers) {
+      const asset = assets.find((item) => item.id === clip.mediaId)
+      if (!asset?.url) continue
+      const source = asset.kind === 'video'
+        ? videoElementsRef.current.get(clip.id)
+        : imageElementsRef.current.get(clip.id)
+      if (!source) continue
+      const width = source instanceof HTMLVideoElement ? source.videoWidth : source.naturalWidth
+      const height = source instanceof HTMLVideoElement ? source.videoHeight : source.naturalHeight
+      if (!width || !height || (source instanceof HTMLVideoElement && source.readyState < 2)) continue
+      const scale = Math.min(canvas.width / width, canvas.height / height)
+      const drawWidth = width * scale
+      const drawHeight = height * scale
+      const effects = clip.effects ?? DEFAULT_CLIP_EFFECTS
+      context.save()
+      context.globalAlpha = effects.opacity / 100
+      context.filter = `brightness(${effects.brightness}%) contrast(${effects.contrast}%) saturate(${effects.saturation}%) blur(${effects.blur}px) grayscale(${effects.grayscale}%) sepia(${effects.sepia}%) hue-rotate(${effects.hueRotate}deg)`
+      context.drawImage(source, (canvas.width - drawWidth) / 2, (canvas.height - drawHeight) / 2, drawWidth, drawHeight)
+      context.restore()
+    }
+  }, [isExporting, tracks, assets, playhead, projectResolution])
+
   const createShapeLayer = async (shape: 'rectangle' | 'ellipse') => {
     const geometry = shape === 'rectangle'
       ? '<rect x="510" y="330" width="900" height="420" rx="28" fill="' + shapeColor + '" />'
@@ -591,7 +702,7 @@ function Editor() {
           <button className="kx-button kx-button-quiet" onClick={() => projectInput.current?.click()}><FolderOpen size={15} /> Open</button>
           <input ref={projectInput} hidden type="file" accept=".kcx1,application/json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openProject(file); event.target.value = '' }} />
           <button className="kx-button kx-button-quiet" onClick={saveProject}><Save size={15} /> Save project</button>
-          <button className="kx-button kx-button-primary" onClick={() => setNotice('Video rendering is not wired yet; the shared media renderer is the next engine milestone.')}><Sparkles size={15} /> Render</button>
+          <button className="kx-button kx-button-primary" onClick={startExport} disabled={isExporting}><Sparkles size={15} /> {isExporting ? 'Exporting…' : 'Export WebM'}</button>
         </div>
       </header>
       <div className="kx-menu-row"><span>File</span><span>Edit</span><span>Composition</span><span>Layer</span><span>Effects</span><span>Animation</span><span>View</span><span>Help</span><div className="kx-menu-spacer" /><span className="kx-version">X1 FOUNDATION BUILD</span></div>
@@ -663,10 +774,11 @@ function Editor() {
                 const layerIndex = activeVisualClips.findIndex((item) => item.clip.id === clip.id)
                 return asset.kind === 'video'
                   ? <video key={clip.id} className="kx-composition-layer" ref={(element) => { if (element) videoElementsRef.current.set(clip.id, element); else videoElementsRef.current.delete(clip.id) }} src={asset.url} style={{ filter, opacity: effects.opacity / 100, zIndex: activeVisualClips.length - layerIndex }} muted={layerIndex !== 0} playsInline preload="auto" />
-                  : <img key={clip.id} className="kx-composition-layer" src={asset.url} alt={asset.name} style={{ filter, opacity: effects.opacity / 100, zIndex: activeVisualClips.length - layerIndex }} />
+                  : <img key={clip.id} className="kx-composition-layer" ref={(element) => { if (element) imageElementsRef.current.set(clip.id, element); else imageElementsRef.current.delete(clip.id) }} src={asset.url} alt={asset.name} style={{ filter, opacity: effects.opacity / 100, zIndex: activeVisualClips.length - layerIndex }} />
               }) : activeAudioClips.length > 0 ? <div className="kx-audio-preview"><AudioLines size={54} /><strong>{activeAudioClips.map(({ clip }) => assets.find((asset) => asset.id === clip.mediaId)?.name ?? 'Audio').join(' + ')}</strong><span>Timeline audio mix</span></div> :
                 selectedAsset && !selectedAsset.url ? <div className="kx-preview-empty"><FolderOpen size={30} /><strong>MEDIA OFFLINE</strong><span>RELINK THE SOURCE FILE TO PREVIEW</span></div> :
                 <div className="kx-preview-empty"><div className="kx-preview-logo"><Clapperboard size={32} /></div><strong>KYROCUT X1</strong><span>CREATIVE VIEWPORT</span><small>Move the playhead over a layer to preview the composition</small></div>}
+              <canvas ref={exportCanvasRef} className="kx-export-canvas" aria-hidden="true" />
               {audioTimelineClips.map((clip) => {
                 const asset = assets.find((item) => item.id === clip.mediaId)
                 return asset?.url && asset.kind === 'audio' ? <audio key={clip.id} ref={(element) => { if (element) audioElementsRef.current.set(clip.id, element); else audioElementsRef.current.delete(clip.id) }} src={asset.url} preload="auto" aria-hidden="true" /> : null
