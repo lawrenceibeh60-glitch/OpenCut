@@ -8,6 +8,7 @@ import { parseProjectManifest, type ClipEffects, type ClipKeyframe, type Project
 import { evaluateClipEffects } from '../lib/clip-animation'
 import { inheritNullLayerTransform } from '../lib/null-layer'
 import { parseCubeLut, type Lut3D } from '../lib/lut'
+import { transcodeWebMToMp4 } from '../lib/ffmpeg-export'
 import { applyClipTrim } from '../lib/timeline-editing'
 import { createWebGLCompositor, type WebGLCompositor } from '../lib/webgl-compositor'
 import { getMediaBlob, saveMediaBlob } from '../lib/media-storage'
@@ -63,6 +64,7 @@ function Editor() {
   const [backgroundRemovalProgress, setBackgroundRemovalProgress] = useState(0)
   const [ownedWatermarkConfirmed, setOwnedWatermarkConfirmed] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [exportFormat, setExportFormat] = useState<'webm' | 'mp4'>('mp4')
   const [showCompositionSettings, setShowCompositionSettings] = useState(false)
   const [trimDrag, setTrimDrag] = useState<TrimDrag | null>(null)
   const [projectName, setProjectName] = useState('Untitled project')
@@ -680,21 +682,36 @@ function Editor() {
       setIsExporting(false)
       setPlaying(false)
     }
-    recorder.onstop = () => {
-      const blob = new Blob(recordingChunksRef.current, { type: recorder.mimeType || 'video/webm' })
+    recorder.onstop = async () => {
+      const webm = new Blob(recordingChunksRef.current, { type: recorder.mimeType || 'video/webm' })
       recordingChunksRef.current = []
       stream.getTracks().forEach((track) => track.stop())
       recorderRef.current = null
-      setIsExporting(false)
       setPlaying(false)
-      if (!blob.size) { setNotice('Export produced an empty file. Check that your browser can decode the source media.'); return }
-      const url = URL.createObjectURL(blob)
+      if (!webm.size) {
+        setIsExporting(false)
+        setNotice('Export produced an empty file. Check that your browser can decode the source media.')
+        return
+      }
+      let output = webm
+      let extension = 'webm'
+      if (exportFormat === 'mp4') {
+        try {
+          setNotice('Encoding MP4 with FFmpeg · preparing H.264 video and AAC audio…')
+          output = await transcodeWebMToMp4(webm, (percent) => setNotice('Encoding MP4 with FFmpeg · ' + percent + '%'))
+          extension = 'mp4'
+        } catch (error) {
+          setNotice('MP4 conversion failed; saving the original WebM instead. ' + (error instanceof Error ? error.message : 'Unknown FFmpeg error'))
+        }
+      }
+      setIsExporting(false)
+      const url = URL.createObjectURL(output)
       const link = document.createElement('a')
       link.href = url
-      link.download = (projectName.trim().replace(/[^a-z0-9-_]+/gi, '-').toLowerCase() || 'kyrocut-export') + '.webm'
+      link.download = (projectName.trim().replace(/[^a-z0-9-_]+/gi, '-').toLowerCase() || 'kyrocut-export') + '.' + extension
       link.click()
       window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
-      setNotice('WebM export complete · ' + (blob.size / (1024 * 1024)).toFixed(1) + ' MB')
+      setNotice(extension.toUpperCase() + ' export complete · ' + (output.size / (1024 * 1024)).toFixed(1) + ' MB')
     }
     recorderRef.current = recorder
     setPlayhead(0)
@@ -988,7 +1005,8 @@ function Editor() {
           <button className="kx-button kx-button-quiet" onClick={() => projectInput.current?.click()}><FolderOpen size={15} /> Open</button>
           <input ref={projectInput} hidden type="file" accept=".kcx1,application/json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openProject(file); event.target.value = '' }} />
           <button className="kx-button kx-button-quiet" onClick={saveProject}><Save size={15} /> Save project</button>
-          <button className="kx-button kx-button-primary" onClick={() => isExporting ? recorderRef.current?.stop() : startExport()}><Sparkles size={15} /> {isExporting ? 'Stop export' : 'Export WebM'}</button>
+          <label className="kx-export-format"><span>FORMAT</span><select aria-label="Export format" value={exportFormat} onChange={(event) => setExportFormat(event.target.value as 'webm' | 'mp4')} disabled={isExporting}><option value="mp4">MP4 · H.264/AAC</option><option value="webm">WebM · VP9/Opus</option></select></label>
+          <button className="kx-button kx-button-primary" onClick={() => isExporting ? recorderRef.current?.stop() : startExport()}><Sparkles size={15} /> {isExporting ? 'Stop export' : 'Export ' + exportFormat.toUpperCase()}</button>
         </div>
       </header>
       {showCompositionSettings && <section className="kx-composition-settings">
