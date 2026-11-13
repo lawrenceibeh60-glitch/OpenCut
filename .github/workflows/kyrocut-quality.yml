@@ -1,0 +1,40 @@
+name: KYROCUT X1 quality
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches:
+      - feat/kyrocut-x1-after-effects-web-workspace
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    name: Web tests and production build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build
+
+  rust-renderer:
+    name: Rust renderer tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test -p kyrocut-render
