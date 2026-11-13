@@ -329,7 +329,7 @@ function Editor() {
     const text = titleText.trim()
     if (!text) { setNotice('Enter some text before creating a title layer'); return }
     const xmlSafe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
-    const lines = xmlSafe.split(/\\r?\\n/)
+    const lines = xmlSafe.split(/\r?\n/)
     const lineHeight = 96
     const firstY = 540 - ((lines.length - 1) * lineHeight) / 2
     const tspans = lines.map((line, index) => `<tspan x="960" y="${firstY + index * lineHeight}">${line || ' '}</tspan>`).join('')
