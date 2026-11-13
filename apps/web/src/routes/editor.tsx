@@ -574,7 +574,9 @@ function Editor() {
         if (!response.ok) throw new Error('Could not read the selected image source')
         return response.blob()
       })
+      if (original.size > 40 * 1024 * 1024) throw new Error('Background removal supports images up to 40 MB')
       const input = new File([original], selectedAsset.name, { type: original.type || selectedAsset.mimeType || 'image/png' })
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(input.type)) throw new Error('Use a PNG, JPEG or WebP image for AI background removal')
       const result = await removeBackground(input, {
         quality: 'quality',
         onProgress: ({ progress, message }) => {
