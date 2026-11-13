@@ -153,7 +153,26 @@ export const CREATIVE_PRESETS: CreativePreset[] = [
   ]),
 ]
 
+export const CREATIVE_LUT_ASSETS = [
+  { name: 'Kodak 2393 Cuspclip', filename: 'kodak_2393_cuspclip.cube', category: 'Print' },
+  { name: 'Fuji 3513 Constlclip', filename: 'fuji_3513_constlclip.cube', category: 'Print' },
+  { name: 'Kodak 2383 Constlmap', filename: 'kodak_2383_constlmap.cube', category: 'Print' },
+  { name: 'Kodak Portra 400 Nc', filename: 'kodak_portra_400_nc.cube', category: 'Negative' },
+  { name: 'Ilford Delta 3200 ++', filename: 'ilford_delta_3200_++.cube', category: 'Black & White' },
+  { name: 'Fuji 160C', filename: 'fuji_160c.cube', category: 'Negative' },
+  { name: 'Kodak Portra 800 +', filename: 'kodak_portra_800_+.cube', category: 'Negative' },
+  { name: 'Ilford HP5 Plus 400', filename: 'ilford_hp_5_plus_400.cube', category: 'Black & White' },
+  { name: 'Fuji Provia 400F', filename: 'fuji_provia_400f.cube', category: 'Slide Film' },
+  { name: 'Kodak Kodachrome 25', filename: 'kodak_kodachrome_25.cube', category: 'Slide Film' },
+  { name: 'Fuji X-Trans III Pro Neg Std', filename: 'fuji_xtrans_iii_pro_neg_std.cube', category: 'Camera Look' },
+  { name: 'Fuji X-Trans III Velvia', filename: 'fuji_xtrans_iii_velvia.cube', category: 'Camera Look' },
+  { name: 'Fuji FP-100C +', filename: 'fuji_fp-100c_+.cube', category: 'Instant Film' },
+  { name: 'Polaroid 665 --', filename: 'polaroid_665_--.cube', category: 'Instant Film' },
+  { name: 'Kodak Elite Color 200', filename: 'kodak_elite_color_200.cube', category: 'Negative Color' },
+] as const
+
 export const CREATIVE_ASSET_SOURCES = [
+  {id:'bundled-luts',name:'KYROCUT bundled film LUT starter pack',category:'LUTs',license:'MIT',url:'/assets/luts/catalog.json',details:'15 bundled .cube looks from YahiaAngelo/Film-Luts, with license notice.'},
   {id:'daedal-luts',name:'DAEDAL Creative LUT collections',category:'LUTs',license:'CC0 1.0',url:'https://daedal.art/luts/',details:'Five Rec.709 LUT collections. Download from the source library.'},
   {id:'daedal-film',name:'DAEDAL film overlays and transitions',category:'Overlays',license:'CC0 1.0',url:'https://daedal.art/film-assets/',details:'Grain, light leaks, film burns, VHS, bokeh, particles and frames.'},
   {id:'google-fonts',name:'Google Fonts',category:'Fonts',license:'Per-family OFL / Apache / UFL',url:'https://fonts.google.com/',details:'Check the license attached to each family before bundling.'},
