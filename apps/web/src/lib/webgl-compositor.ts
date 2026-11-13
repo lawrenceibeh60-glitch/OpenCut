@@ -1,4 +1,5 @@
 import type { ClipEffects } from './project-format'
+import type { Lut3D } from './lut'
 
 
 /** Build the source-fit, scale, rotation and translation matrix used by the GPU vertex shader. */
@@ -32,6 +33,8 @@ export type GpuLayer = {
   id: string
   source: HTMLImageElement | HTMLVideoElement
   effects: ClipEffects
+  lut?: Lut3D
+  lutStrength?: number
 }
 
 const vertexSource = `#version 300 es
@@ -57,6 +60,11 @@ uniform float uBlur;
 uniform float uGrayscale;
 uniform float uSepia;
 uniform float uHue;
+uniform sampler3D uLut;
+uniform vec3 uLutDomainMin;
+uniform vec3 uLutDomainMax;
+uniform float uLutStrength;
+uniform bool uUseLut;
 in vec2 vTexCoord;
 out vec4 outColor;
 
@@ -100,6 +108,11 @@ void main() {
     0.072 + c * 0.928 + s * 0.072
   );
   color = clamp(hueMatrix * color, 0.0, 1.0);
+  if (uUseLut && uLutStrength > 0.0) {
+    vec3 lutCoordinate = clamp((color - uLutDomainMin) / (uLutDomainMax - uLutDomainMin), 0.0, 1.0);
+    vec3 graded = texture(uLut, lutCoordinate).rgb;
+    color = mix(color, graded, clamp(uLutStrength, 0.0, 1.0));
+  }
   float alpha = sampleColor.a * uOpacity;
   outColor = vec4(color * alpha, alpha);
 }`
@@ -122,6 +135,7 @@ export class WebGLCompositor {
   private readonly program: WebGLProgram
   private readonly buffer: WebGLBuffer
   private readonly textures = new Map<string, WebGLTexture>()
+  private readonly lutTextures = new Map<string, WebGLTexture>()
   private readonly locations: Record<string, WebGLUniformLocation>
   private readonly positionLocation: number
   private readonly texCoordLocation: number
@@ -160,7 +174,7 @@ export class WebGLCompositor {
     gl.vertexAttribPointer(this.positionLocation, 2, gl.FLOAT, false, 16, 0)
     gl.enableVertexAttribArray(this.texCoordLocation)
     gl.vertexAttribPointer(this.texCoordLocation, 2, gl.FLOAT, false, 16, 8)
-    const names = ['uTransform', 'uTexture', 'uTexel', 'uOpacity', 'uBrightness', 'uContrast', 'uSaturation', 'uBlur', 'uGrayscale', 'uSepia', 'uHue']
+    const names = ['uTransform', 'uTexture', 'uTexel', 'uOpacity', 'uBrightness', 'uContrast', 'uSaturation', 'uBlur', 'uGrayscale', 'uSepia', 'uHue', 'uLut', 'uLutDomainMin', 'uLutDomainMax', 'uLutStrength', 'uUseLut']
     this.locations = Object.fromEntries(names.map((name) => {
       const location = gl.getUniformLocation(program, name)
       if (!location) throw new Error('WebGL uniform is missing: ' + name)
@@ -180,7 +194,12 @@ export class WebGLCompositor {
     gl.useProgram(this.program)
     gl.activeTexture(gl.TEXTURE0)
     gl.uniform1i(this.locations.uTexture, 0)
+    gl.uniform1i(this.locations.uLut, 1)
     const activeIds = new Set(layers.map((layer) => layer.id))
+    const activeLutIds = new Set(layers.flatMap((layer) => layer.lut && (layer.lutStrength ?? 1) > 0 ? [layer.lut.id] : []))
+    for (const [id, texture] of this.lutTextures) {
+      if (!activeLutIds.has(id)) { gl.deleteTexture(texture); this.lutTextures.delete(id) }
+    }
     for (const [id, texture] of this.textures) {
       if (!activeIds.has(id)) {
         gl.deleteTexture(texture)
@@ -210,6 +229,36 @@ export class WebGLCompositor {
         continue
       }
       const effects = layer.effects
+      if (layer.lut && (layer.lutStrength ?? 1) > 0) {
+        let lutTexture = this.lutTextures.get(layer.lut.id)
+        if (!lutTexture) {
+          lutTexture = gl.createTexture() ?? undefined
+          if (lutTexture) {
+            this.lutTextures.set(layer.lut.id, lutTexture)
+            gl.activeTexture(gl.TEXTURE1)
+            gl.bindTexture(gl.TEXTURE_3D, lutTexture)
+            gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+            gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+            gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+            gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+            gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE)
+            gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA32F, layer.lut.size, layer.lut.size, layer.lut.size, 0, gl.RGBA, gl.FLOAT, layer.lut.data)
+          }
+        }
+        if (lutTexture) {
+          gl.activeTexture(gl.TEXTURE1)
+          gl.bindTexture(gl.TEXTURE_3D, lutTexture)
+          gl.uniform3fv(this.locations.uLutDomainMin, layer.lut.domainMin)
+          gl.uniform3fv(this.locations.uLutDomainMax, layer.lut.domainMax)
+          gl.uniform1f(this.locations.uLutStrength, Math.min(1, Math.max(0, layer.lutStrength ?? 1)))
+          gl.uniform1i(this.locations.uUseLut, 1)
+        } else {
+          gl.uniform1i(this.locations.uUseLut, 0)
+        }
+      } else {
+        gl.uniform1i(this.locations.uUseLut, 0)
+      }
+      gl.activeTexture(gl.TEXTURE0)
       const transform = createLayerTransform(width, height, sourceWidth, sourceHeight, effects)
       gl.uniformMatrix3fv(this.locations.uTransform, false, transform)
       gl.uniform2f(this.locations.uTexel, 1 / sourceWidth, 1 / sourceHeight)
@@ -232,7 +281,9 @@ export class WebGLCompositor {
 
   dispose(): void {
     for (const texture of this.textures.values()) this.gl.deleteTexture(texture)
+    for (const texture of this.lutTextures.values()) this.gl.deleteTexture(texture)
     this.textures.clear()
+    this.lutTextures.clear()
     this.gl.deleteBuffer(this.buffer)
     this.gl.deleteProgram(this.program)
   }
