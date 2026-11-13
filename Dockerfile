@@ -1,5 +1,5 @@
 # Build the Rust renderer as a browser WebAssembly package.
-FROM rust:stable-bookworm AS wasm-builder
+FROM rust:1-bookworm AS wasm-builder
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates pkg-config build-essential \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
