@@ -414,7 +414,9 @@ function Editor() {
     if (targetTrack.locked) { setNotice('That track is locked'); return }
     const compatible = asset.kind === 'audio'
       ? targetTrack.kind === 'audio'
-      : targetTrack.kind === 'video' || (asset.kind === 'image' && targetTrack.kind === 'graphics')
+      : asset.kind === 'null'
+        ? targetTrack.kind === 'adjustment'
+        : targetTrack.kind === 'video' || (asset.kind === 'image' && targetTrack.kind === 'graphics')
     if (!compatible) { setNotice('That media type cannot be placed on this track'); return }
     const snappedStart = framesToSeconds(secondsToFrames(Math.max(0, startSeconds), projectFrameRate), projectFrameRate)
     setTracks((current) => current.map((track) => {
@@ -446,6 +448,7 @@ function Editor() {
     const rightClip: TimelineClip = {
       id: createId(), mediaId: selectedClip.mediaId, start: selectedClip.start + splitOffset,
       sourceIn: selectedClip.sourceIn + splitOffset, duration: selectedClip.duration - splitOffset, enabled: selectedClip.enabled,
+      effects: selectedClip.effects, keyframes: selectedClip.keyframes, parentClipId: selectedClip.parentClipId,
     }
     setTracks((current) => current.map((track) => track.id === selectedClip.trackId
       ? { ...track, clips: track.clips.flatMap((clip) => clip.id === selectedClip.id
@@ -457,7 +460,8 @@ function Editor() {
   }
   const removeSelectedClip = () => {
     if (!selectedClipId) return
-    setTracks((current) => current.map((track) => ({ ...track, clips: track.clips.filter((clip) => clip.id !== selectedClipId) })))
+    const removingNullController = assets.some((asset) => asset.id === selectedClip?.mediaId && asset.kind === 'null')
+    setTracks((current) => current.map((track) => ({ ...track, clips: track.clips.filter((clip) => clip.id !== selectedClipId).map((clip) => removingNullController && clip.parentClipId === selectedClipId ? { ...clip, parentClipId: undefined } : clip) })))
     setSelectedClipId(null)
     setNotice('Clip removed from timeline')
   }
