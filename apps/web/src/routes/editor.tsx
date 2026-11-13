@@ -1,5 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { removeBackground } from '@bg0/browser'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import { framesToSeconds, secondsToFrames, SEQUENCE_FRAME_RATE } from '../lib/timebase'
@@ -8,7 +7,6 @@ import { parseProjectManifest, type ClipEffects, type ClipKeyframe, type Project
 import { evaluateClipEffects } from '../lib/clip-animation'
 import { inheritNullLayerTransform } from '../lib/null-layer'
 import { parseCubeLut, type Lut3D } from '../lib/lut'
-import { transcodeWebMToMp4 } from '../lib/ffmpeg-export'
 import { applyClipTrim } from '../lib/timeline-editing'
 import { createWebGLCompositor, type WebGLCompositor } from '../lib/webgl-compositor'
 import { getMediaBlob, saveMediaBlob } from '../lib/media-storage'
@@ -617,6 +615,8 @@ function Editor() {
       if (original.size > 40 * 1024 * 1024) throw new Error('Background removal supports images up to 40 MB')
       const input = new File([original], selectedAsset.name, { type: original.type || selectedAsset.mimeType || 'image/png' })
       if (!['image/png', 'image/jpeg', 'image/webp'].includes(input.type)) throw new Error('Use a PNG, JPEG or WebP image for AI background removal')
+      setNotice('Loading local AI background-removal engine…')
+      const { removeBackground } = await import('@bg0/browser')
       const result = await removeBackground(input, {
         quality: 'quality',
         onProgress: ({ progress, message }) => {
@@ -731,6 +731,7 @@ function Editor() {
       if (exportFormat === 'mp4') {
         try {
           setNotice('Encoding MP4 with FFmpeg · preparing H.264 video and AAC audio…')
+          const { transcodeWebMToMp4 } = await import('../lib/ffmpeg-export')
           output = await transcodeWebMToMp4(webm, (percent) => setNotice('Encoding MP4 with FFmpeg · ' + percent + '%'))
           extension = 'mp4'
         } catch (error) {
