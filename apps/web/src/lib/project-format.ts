@@ -61,6 +61,8 @@ export type ProjectManifest = {
       effects?: ClipEffects
       keyframes?: ClipKeyframe[]
       parentClipId?: string
+      lutId?: string
+      lutIntensity?: number
     }>
   }>
   playheadFrame: number
@@ -237,6 +239,8 @@ export function parseProjectManifest(source: string): ProjectManifest {
         ...(effects ? { effects } : {}),
         ...(keyframes?.length ? { keyframes } : {}),
         ...(clip.parentClipId === undefined ? {} : { parentClipId: stringValue(clip.parentClipId, 'Parent null-layer ID') }),
+        ...(clip.lutId === undefined ? {} : { lutId: stringValue(clip.lutId, 'LUT ID') }),
+        ...(clip.lutIntensity === undefined ? {} : { lutIntensity: boundedNumber(clip.lutIntensity, 'LUT intensity', 0, 1, 1) }),
       }
     })
     return {
