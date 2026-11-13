@@ -443,21 +443,6 @@ function Editor() {
     canvas.height = projectResolution.height
     const fps = Math.min(60, Math.max(1, projectFrameRate.numerator / projectFrameRate.denominator))
     const stream = canvas.captureStream(fps)
-    const audioSources: Array<HTMLAudioElement | HTMLVideoElement> = [
-      ...audioTimelineClips.map((clip) => audioElementsRef.current.get(clip.id)).filter((item): item is HTMLAudioElement => Boolean(item)),
-      ...activeVisualClips.map(({ clip }) => videoElementsRef.current.get(clip.id)).filter((item): item is HTMLVideoElement => Boolean(item)),
-    ]
-    const capturedAudio = new Set<string>()
-    for (const source of audioSources) {
-      const capturable = source as (HTMLAudioElement | HTMLVideoElement) & { captureStream?: () => MediaStream }
-      const audioStream = capturable.captureStream?.()
-      for (const track of audioStream?.getAudioTracks() ?? []) {
-        if (!capturedAudio.has(track.id)) {
-          stream.addTrack(track)
-          capturedAudio.add(track.id)
-        }
-      }
-    }
     const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
       .find((type) => MediaRecorder.isTypeSupported(type))
     let recorder: MediaRecorder
@@ -495,8 +480,33 @@ function Editor() {
     setPlayhead(0)
     setIsExporting(true)
     setPlaying(true)
-    recorder.start(250)
-    setNotice('Recording composition to WebM…')
+    requestAnimationFrame(() => {
+      const audioSources: Array<HTMLAudioElement | HTMLVideoElement> = [
+        ...audioTimelineClips.map((clip) => audioElementsRef.current.get(clip.id)).filter((item): item is HTMLAudioElement => Boolean(item)),
+        ...videoElementsRef.current.values(),
+      ]
+      const capturedAudio = new Set<string>()
+      for (const source of audioSources) {
+        const capturable = source as (HTMLAudioElement | HTMLVideoElement) & { captureStream?: () => MediaStream }
+        const audioStream = capturable.captureStream?.()
+        for (const track of audioStream?.getAudioTracks() ?? []) {
+          if (!capturedAudio.has(track.id)) {
+            stream.addTrack(track)
+            capturedAudio.add(track.id)
+          }
+        }
+      }
+      try {
+        recorder.start(250)
+        setNotice('Recording composition to WebM…')
+      } catch (error) {
+        stream.getTracks().forEach((track) => track.stop())
+        recorderRef.current = null
+        setIsExporting(false)
+        setPlaying(false)
+        setNotice(error instanceof Error ? 'Could not start recording: ' + error.message : 'Could not start recording')
+      }
+    })
   }
 
   useEffect(() => {
@@ -739,7 +749,7 @@ function Editor() {
           <button className="kx-button kx-button-quiet" onClick={() => projectInput.current?.click()}><FolderOpen size={15} /> Open</button>
           <input ref={projectInput} hidden type="file" accept=".kcx1,application/json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openProject(file); event.target.value = '' }} />
           <button className="kx-button kx-button-quiet" onClick={saveProject}><Save size={15} /> Save project</button>
-          <button className="kx-button kx-button-primary" onClick={startExport} disabled={isExporting}><Sparkles size={15} /> {isExporting ? 'Exporting…' : 'Export WebM'}</button>
+          <button className="kx-button kx-button-primary" onClick={() => isExporting ? recorderRef.current?.stop() : startExport()}><Sparkles size={15} /> {isExporting ? 'Stop export' : 'Export WebM'}</button>
         </div>
       </header>
       <div className="kx-menu-row"><span>File</span><span>Edit</span><span>Composition</span><span>Layer</span><span>Effects</span><span>Animation</span><span>View</span><span>Help</span><div className="kx-menu-spacer" /><span className="kx-version">X1 FOUNDATION BUILD</span></div>
