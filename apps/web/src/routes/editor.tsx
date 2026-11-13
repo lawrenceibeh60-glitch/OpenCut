@@ -6,6 +6,7 @@ import type { RationalFrameRate } from '../lib/timebase'
 import { parseProjectManifest, type ClipEffects, type ClipKeyframe, type ProjectManifest } from '../lib/project-format'
 import { evaluateClipEffects } from '../lib/clip-animation'
 import { applyClipTrim } from '../lib/timeline-editing'
+import { createWebGLCompositor, type WebGLCompositor } from '../lib/webgl-compositor'
 import { getMediaBlob, saveMediaBlob } from '../lib/media-storage'
 import { clampTimelineTime, getActivePlaybackClips, getPrimaryPreviewClip } from '../lib/timeline-playback'
 import { decodeProjectArchive, encodeProjectArchive, isProjectArchive } from '../lib/project-archive'
@@ -65,10 +66,13 @@ function Editor() {
   const audioElementsRef = useRef(new Map<string, HTMLAudioElement>())
   const imageElementsRef = useRef(new Map<string, HTMLImageElement>())
   const exportCanvasRef = useRef<HTMLCanvasElement>(null)
+  const gpuCompositorRef = useRef<WebGLCompositor | null>(null)
+  const gpuFallbackRef = useRef(false)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const recordingChunksRef = useRef<Blob[]>([])
   const objectUrls = useRef<string[]>([])
   useEffect(() => () => objectUrls.current.forEach((url) => URL.revokeObjectURL(url)), [])
+  useEffect(() => () => gpuCompositorRef.current?.dispose(), [])
 
   useEffect(() => {
     if (!trimDrag) return
@@ -489,6 +493,17 @@ function Editor() {
     if (recorderRef.current?.state === 'recording') return
     canvas.width = projectResolution.width
     canvas.height = projectResolution.height
+    if (!gpuCompositorRef.current && !gpuFallbackRef.current) {
+      try {
+        const gpu = createWebGLCompositor(canvas)
+        if (gpu) gpuCompositorRef.current = gpu
+        else if (canvas.getContext('2d')) gpuFallbackRef.current = true
+        else { setNotice('Neither WebGL2 nor Canvas2D is available for export'); return }
+      } catch (error) {
+        setNotice(error instanceof Error ? 'GPU renderer initialization failed: ' + error.message : 'GPU renderer initialization failed')
+        return
+      }
+    }
     const fps = Math.min(60, Math.max(1, projectFrameRate.numerator / projectFrameRate.denominator))
     const stream = canvas.captureStream(fps)
     const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
@@ -563,8 +578,25 @@ function Editor() {
   useEffect(() => {
     if (!isExporting) return
     const canvas = exportCanvasRef.current
-    const context = canvas?.getContext('2d')
-    if (!canvas || !context) return
+    if (!canvas) return
+    if (gpuCompositorRef.current) {
+      const layers = [...getActivePlaybackClips(tracks, playhead)]
+        .filter(({ track }) => track.kind === 'video' || track.kind === 'graphics')
+        .reverse()
+        .flatMap(({ clip }) => {
+          const asset = assets.find((item) => item.id === clip.mediaId)
+          const source = asset?.kind === 'video'
+            ? videoElementsRef.current.get(clip.id)
+            : asset?.kind === 'image' ? imageElementsRef.current.get(clip.id) : undefined
+          if (!source) return []
+          const effects = evaluateClipEffects(clip.effects ?? DEFAULT_CLIP_EFFECTS, clip.keyframes, secondsToFrames(Math.max(0, playhead - clip.start), projectFrameRate))
+          return [{ id: clip.id, source, effects }]
+        })
+      gpuCompositorRef.current.render(canvas.width, canvas.height, layers)
+      return
+    }
+    const context = canvas.getContext('2d')
+    if (!context) { setNotice('Canvas2D fallback is unavailable for export'); return }
     context.fillStyle = '#000000'
     context.fillRect(0, 0, canvas.width, canvas.height)
     const layers = [...getActivePlaybackClips(tracks, playhead)]
