@@ -52,8 +52,8 @@ function Editor() {
   const fileInput = useRef<HTMLInputElement>(null)
   const projectInput = useRef<HTMLInputElement>(null)
   const relinkInput = useRef<HTMLInputElement>(null)
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const audioRef = useRef<HTMLAudioElement>(null)
+  const videoElementsRef = useRef(new Map<string, HTMLVideoElement>())
+  const audioElementsRef = useRef(new Map<string, HTMLAudioElement>())
   const objectUrls = useRef<string[]>([])
   useEffect(() => () => objectUrls.current.forEach((url) => URL.revokeObjectURL(url)), [])
 
@@ -117,11 +117,15 @@ function Editor() {
 
   const allClips = useMemo(() => tracks.flatMap((track) => track.clips.map((clip) => ({ ...clip, trackId: track.id }))), [tracks])
   const selectedClip = allClips.find((clip) => clip.id === selectedClipId) ?? null
+  const activePlayback = useMemo(() => getActivePlaybackClips(tracks, playhead), [tracks, playhead])
+  const activeVisualClips = useMemo(() => activePlayback.filter(({ track }) => track.kind === 'video' || track.kind === 'graphics'), [activePlayback])
+  const activeAudioClips = useMemo(() => activePlayback.filter(({ track }) => track.kind === 'audio'), [activePlayback])
+  const audioTimelineClips = useMemo(() => tracks.filter((track) => track.kind === 'audio').flatMap((track) => track.clips), [tracks])
   useEffect(() => {
-    const active = getActivePlaybackClips(tracks, playhead)
-    const candidate = getPrimaryPreviewClip(active)
+    const candidate = getPrimaryPreviewClip(activePlayback)
     if (candidate && candidate.clip.id !== selectedClipId) setSelectedClipId(candidate.clip.id)
-  }, [playhead, tracks, selectedClipId])
+    else if (!candidate && playing && selectedClipId) setSelectedClipId(null)
+  }, [activePlayback, selectedClipId, playing])
   const selectedAsset = assets.find((asset) => asset.id === selectedClip?.mediaId) ?? null
   const projectDuration = Math.max(30, ...allClips.filter((clip) => clip.enabled).map((clip) => clip.start + clip.duration))
   const selectedTrack = tracks.find((track) => track.clips.some((clip) => clip.id === selectedClipId))
@@ -161,15 +165,42 @@ function Editor() {
   }, [projectDocument, recoveryReady])
 
   useEffect(() => {
-    const sourceTime = selectedClip ? selectedClip.sourceIn + Math.max(0, playhead - selectedClip.start) : 0
-    const media = videoRef.current ?? audioRef.current
-    if (!media) return
-    if (!playing && Number.isFinite(sourceTime) && Math.abs(media.currentTime - sourceTime) > 0.04) {
-      try { media.currentTime = sourceTime } catch { /* metadata may not be ready yet */ }
+    const activeVideoIds = new Set(activeVisualClips.filter(({ clip }) =>
+      assets.some((asset) => asset.id === clip.mediaId && asset.kind === 'video'),
+    ).map(({ clip }) => clip.id))
+    for (const { clip } of activeVisualClips) {
+      const asset = assets.find((item) => item.id === clip.mediaId)
+      if (asset?.kind !== 'video') continue
+      const media = videoElementsRef.current.get(clip.id)
+      if (!media) continue
+      const sourceTime = clip.sourceIn + Math.max(0, playhead - clip.start)
+      if (!playing && Number.isFinite(sourceTime) && Math.abs(media.currentTime - sourceTime) > 0.04) {
+        try { media.currentTime = sourceTime } catch { /* metadata may not be ready yet */ }
+      }
+      if (playing && media.paused) void media.play().catch(() => setPlaying(false))
+      if (!playing && !media.paused) media.pause()
     }
-    if (playing && media.paused) void media.play().catch(() => setPlaying(false))
-    if (!playing && !media.paused) media.pause()
-  }, [selectedAsset?.id, selectedClip?.id, playhead, playing])
+    for (const [id, media] of videoElementsRef.current) {
+      if (!activeVideoIds.has(id) && !media.paused) media.pause()
+    }
+  }, [activeVisualClips, assets, playhead, playing])
+
+  useEffect(() => {
+    const activeIds = new Set(activeAudioClips.map(({ clip }) => clip.id))
+    for (const clip of audioTimelineClips) {
+      const media = audioElementsRef.current.get(clip.id)
+      if (!media) continue
+      if (!activeIds.has(clip.id) || !playing) {
+        if (!media.paused) media.pause()
+        continue
+      }
+      const sourceTime = clip.sourceIn + Math.max(0, playhead - clip.start)
+      if (Math.abs(media.currentTime - sourceTime) > 0.25) {
+        try { media.currentTime = sourceTime } catch { /* metadata may not be ready yet */ }
+      }
+      if (media.paused) void media.play().catch(() => setPlaying(false))
+    }
+  }, [activeAudioClips, audioTimelineClips, playhead, playing])
 
   useEffect(() => {
     if (!playing) return
@@ -588,10 +619,22 @@ function Editor() {
           <div className="kx-preview-panel">
             <div className="kx-panel-title"><span>COMPOSITION VIEWER</span><span>{projectResolution.width} × {projectResolution.height} <i>·</i> {formatFrameRate(projectFrameRate)}</span></div>
             <div className="kx-preview-stage">
-              {selectedAsset && !selectedAsset.url ? <div className="kx-preview-empty"><FolderOpen size={30} /><strong>MEDIA OFFLINE</strong><span>RELINK THE SOURCE FILE TO PREVIEW</span></div> : selectedAsset?.kind === 'video' ? <video ref={videoRef} style={{ filter: previewFilter, opacity: selectedEffects.opacity / 100 }} src={selectedAsset.url} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}  controls={false} /> :
-                selectedAsset?.kind === 'image' ? <img style={{ filter: previewFilter, opacity: selectedEffects.opacity / 100 }} src={selectedAsset.url} alt={selectedAsset.name} /> :
-                  selectedAsset?.kind === 'audio' ? <div className="kx-audio-preview"><AudioLines size={54} /><strong>{selectedAsset.name}</strong><span>Audio source preview</span><audio ref={audioRef} src={selectedAsset.url} controls onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onTimeUpdate={(event) => { if (selectedClip) { const elapsed = event.currentTarget.currentTime - selectedClip.sourceIn; const clamped = Math.min(selectedClip.duration, Math.max(0, elapsed)); setPlayhead(selectedClip.start + clamped); if (elapsed >= selectedClip.duration) { event.currentTarget.pause(); setPlaying(false) } } }} /></div> :
-                    <div className="kx-preview-empty"><div className="kx-preview-logo"><Clapperboard size={32} /></div><strong>KYROCUT X1</strong><span>CREATIVE VIEWPORT</span><small>Select a clip to preview your composition</small></div>}
+              {activeVisualClips.length > 0 ? [...activeVisualClips].reverse().map(({ clip }) => {
+                const asset = assets.find((item) => item.id === clip.mediaId)
+                const effects = clip.effects ?? DEFAULT_CLIP_EFFECTS
+                const filter = `brightness(${effects.brightness}%) contrast(${effects.contrast}%) saturate(${effects.saturation}%) blur(${effects.blur}px) grayscale(${effects.grayscale}%) sepia(${effects.sepia}%) hue-rotate(${effects.hueRotate}deg)`
+                if (!asset?.url) return <div className="kx-preview-offline" key={clip.id}><FolderOpen size={20} /> {asset?.name ?? 'MEDIA OFFLINE'} — RELINK SOURCE</div>
+                const layerIndex = activeVisualClips.findIndex((item) => item.clip.id === clip.id)
+                return asset.kind === 'video'
+                  ? <video key={clip.id} className="kx-composition-layer" ref={(element) => { if (element) videoElementsRef.current.set(clip.id, element); else videoElementsRef.current.delete(clip.id) }} src={asset.url} style={{ filter, opacity: effects.opacity / 100, zIndex: 1 + layerIndex }} muted playsInline preload="auto" />
+                  : <img key={clip.id} className="kx-composition-layer" src={asset.url} alt={asset.name} style={{ filter, opacity: effects.opacity / 100, zIndex: 1 + layerIndex }} />
+              }) : activeAudioClips.length > 0 ? <div className="kx-audio-preview"><AudioLines size={54} /><strong>{activeAudioClips.map(({ clip }) => assets.find((asset) => asset.id === clip.mediaId)?.name ?? 'Audio').join(' + ')}</strong><span>Timeline audio mix</span></div> :
+                selectedAsset && !selectedAsset.url ? <div className="kx-preview-empty"><FolderOpen size={30} /><strong>MEDIA OFFLINE</strong><span>RELINK THE SOURCE FILE TO PREVIEW</span></div> :
+                <div className="kx-preview-empty"><div className="kx-preview-logo"><Clapperboard size={32} /></div><strong>KYROCUT X1</strong><span>CREATIVE VIEWPORT</span><small>Move the playhead over a layer to preview the composition</small></div>}
+              {audioTimelineClips.map((clip) => {
+                const asset = assets.find((item) => item.id === clip.mediaId)
+                return asset?.url && asset.kind === 'audio' ? <audio key={clip.id} ref={(element) => { if (element) audioElementsRef.current.set(clip.id, element); else audioElementsRef.current.delete(clip.id) }} src={asset.url} preload="auto" aria-hidden="true" /> : null
+              })}
             </div>
             <div className="kx-transport">
               <button className="kx-icon-button" title="Previous frame" onClick={() => stepPlayhead(-1)}><StepBack size={15} /></button><button className="kx-icon-button" title="Play or pause" onClick={togglePlayback}>{playing ? <Pause size={17} /> : <Play size={17} />}</button><button className="kx-icon-button" title="Next frame" onClick={() => stepPlayhead(1)}><StepForward size={15} /></button>
