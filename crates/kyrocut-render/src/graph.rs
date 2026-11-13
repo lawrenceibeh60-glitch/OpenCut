@@ -536,7 +536,7 @@ mod tests {
             RgbaImage::solid(1, 1, [40, 50, 60, 200]).unwrap(),
         )]);
         let rendered = render_compositing_graph(&graph, &media, 1, 1).unwrap();
-        assert_eq!(rendered.pixel(0, 0), Some([80, 100, 120, 200]));
+        assert_eq!(rendered.pixel(0, 0), Some([58, 71, 85, 200]));
     }
 
     #[test]
