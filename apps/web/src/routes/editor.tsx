@@ -541,7 +541,7 @@ function Editor() {
       const effects = evaluateClipEffects(clip.effects ?? DEFAULT_CLIP_EFFECTS, clip.keyframes, secondsToFrames(Math.max(0, playhead - clip.start), projectFrameRate))
       context.save()
       context.globalAlpha = effects.opacity / 100
-      context.globalCompositeOperation = effects.blendMode === 'add' ? 'lighter' : effects.blendMode
+      context.globalCompositeOperation = effects.blendMode === 'add' ? 'lighter' : effects.blendMode === 'normal' ? 'source-over' : effects.blendMode
       context.filter = `brightness(${effects.brightness}%) contrast(${effects.contrast}%) saturate(${effects.saturation}%) blur(${effects.blur}px) grayscale(${effects.grayscale}%) sepia(${effects.sepia}%) hue-rotate(${effects.hueRotate}deg)`
       context.translate(canvas.width / 2 + canvas.width * effects.positionX / 100, canvas.height / 2 + canvas.height * effects.positionY / 100)
       context.rotate(effects.rotation * Math.PI / 180)
