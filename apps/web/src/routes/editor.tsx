@@ -87,15 +87,6 @@ function Editor() {
   useEffect(() => {
     const link = document.createElement('link')
     link.rel = 'stylesheet'
-    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(titleFontFamily).replace(/%20/g, '+')}&display=swap`
-    link.dataset.kyrocutFont = titleFontFamily
-    document.head.appendChild(link)
-    return () => link.remove()
-  }, [titleFontFamily])
-
-  useEffect(() => {
-    const link = document.createElement('link')
-    link.rel = 'stylesheet'
     link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(titleFontFamily).replace(/%20/g, '+')}:wght@400;700&display=swap`
     link.dataset.kyrocutFont = titleFontFamily
     document.head.appendChild(link)
