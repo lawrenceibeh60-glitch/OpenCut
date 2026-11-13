@@ -224,7 +224,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
           }
           if (typeof keyframe.value !== 'number') throw new Error('Keyframe value must be a number')
           const value = boundedNumber(keyframe.value, 'Keyframe value', bounds[property][0], bounds[property][1], 0)
-          const interpolation = keyframe.interpolation === undefined ? 'linear' : keyframe.interpolation
+          const interpolation = (keyframe.interpolation === undefined ? 'linear' : keyframe.interpolation) as ClipKeyframe['interpolation']
           if (interpolation !== 'linear' && interpolation !== 'hold') {
             throw new Error('Unsupported keyframe interpolation')
           }
