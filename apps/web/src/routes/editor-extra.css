@@ -317,3 +317,13 @@
   width: 1px; height: 1px; opacity: 0; pointer-events: none;
 }
 .kx-top-actions button:disabled { opacity: .55; cursor: wait; }
+
+
+.kx-keyframe-button {
+  display: inline-grid; place-items: center;
+  width: 18px; height: 18px; margin-left: 5px;
+  color: #d6ad5c; border: 1px solid #51442e;
+  border-radius: 2px; background: #30291d;
+  font-size: 11px; line-height: 1;
+}
+.kx-keyframe-button:hover { color: #ffe0a0; border-color: #d6ad5c; }
