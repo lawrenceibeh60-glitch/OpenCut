@@ -200,6 +200,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
         rotation: boundedNumber(effectsValue.rotation, 'Effect rotation', -180, 180, 0),
       } : undefined
       if (effects && !['normal', 'multiply', 'screen', 'add'].includes(effects.blendMode)) throw new Error('Unsupported clip blend mode')
+      if (clip.lutIntensity !== undefined && clip.lutId === undefined) throw new Error('LUT intensity requires a LUT ID')
       if (clip.keyframes !== undefined && !Array.isArray(clip.keyframes)) {
         throw new Error('Clip keyframes must be an array')
       }
