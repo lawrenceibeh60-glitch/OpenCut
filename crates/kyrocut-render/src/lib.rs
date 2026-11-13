@@ -84,9 +84,8 @@ impl RgbaImage {
     }
 }
 
-/// Basic creative color controls. Values operate on normalized display RGB
-/// channels; this is an SDR working-space utility, not a color-managed grading
-/// pipeline.
+/// Basic creative color controls. The graph renderer evaluates these controls
+/// in linear-light SDR RGB and converts to/from sRGB at the RGBA8 image boundary.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ColorAdjustments {
     /// Exposure compensation in stops, supported range -8..=8.
