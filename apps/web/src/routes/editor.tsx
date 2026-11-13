@@ -9,7 +9,8 @@ import { inheritNullLayerTransform } from '../lib/null-layer'
 import { parseCubeLut, type Lut3D } from '../lib/lut'
 import { applyClipTrim } from '../lib/timeline-editing'
 import { createWebGLCompositor, type WebGLCompositor } from '../lib/webgl-compositor'
-import { getMediaBlob, saveMediaBlob } from '../lib/media-storage'
+import { clearSessionMedia, getMediaBlob, saveMediaBlob } from '../lib/media-storage'
+import { disposeWorkspaceSession, initializeWorkspaceSession, saveWorkspaceManifest } from '../lib/workspace-session'
 import { clampTimelineTime, getActivePlaybackClips, getPrimaryPreviewClip } from '../lib/timeline-playback'
 import { decodeProjectArchive, encodeProjectArchive, isProjectArchive } from '../lib/project-archive'
 import { CREATIVE_ASSET_SOURCES, CREATIVE_FONTS, CREATIVE_LUT_ASSETS, CREATIVE_PRESETS } from '../lib/creative-library'
@@ -71,7 +72,7 @@ function Editor() {
   const [projectFrameRate, setProjectFrameRate] = useState<RationalFrameRate>(SEQUENCE_FRAME_RATE)
   const [projectResolution, setProjectResolution] = useState({ width: 1920, height: 1080 })
   const [notice, setNotice] = useState('Import media to begin editing')
-  const [recoveryReady, setRecoveryReady] = useState(false)
+  const [workspaceStatus, setWorkspaceStatus] = useState<'starting' | 'ready' | 'offline'>('starting')
   const fileInput = useRef<HTMLInputElement>(null)
   const projectInput = useRef<HTMLInputElement>(null)
   const relinkInput = useRef<HTMLInputElement>(null)
@@ -155,60 +156,28 @@ function Editor() {
 
   useEffect(() => {
     let active = true
-    const recover = async () => {
-      try {
-        const saved = localStorage.getItem('kyrocut-x1:recovery')
-        if (saved) {
-          const manifest = parseProjectManifest(saved)
-          if (manifest.format === 'kyrocut-project' && manifest.version === 1 && Array.isArray(manifest.media) && Array.isArray(manifest.tracks)) {
-            const frameRate = manifest.frameRate?.numerator && manifest.frameRate?.denominator ? manifest.frameRate : SEQUENCE_FRAME_RATE
-            const restoredAssets = await Promise.all(manifest.media.map(async (asset) => {
-              const blob = await getMediaBlob(asset.id).catch(() => null)
-              const url = blob ? URL.createObjectURL(blob) : ''
-              if (url) objectUrls.current.push(url)
-              return {
-                id: asset.id, name: asset.name, kind: asset.kind, url,
-                size: blob?.size ?? asset.size ?? 0,
-                duration: framesToSeconds(asset.durationFrames ?? 0, frameRate),
-                durationKnown: asset.durationFrames !== null,
-                mimeType: blob?.type ?? asset.mimeType ?? '',
-                missing: asset.kind !== 'null' && !blob,
-              }
-            }))
-            if (!active) {
-              restoredAssets.forEach((asset) => { if (asset.url) URL.revokeObjectURL(asset.url) })
-              return
-            }
-            setProjectFrameRate(frameRate)
-            setProjectResolution(manifest.resolution)
-            setAssets(restoredAssets)
-            setTracks(manifest.tracks.map((track) => ({
-              id: track.id, name: track.name, kind: track.kind,
-              muted: Boolean(track.muted), locked: Boolean(track.locked),
-              clips: track.clips.map((clip) => ({
-                id: clip.id, mediaId: clip.mediaId,
-                start: framesToSeconds(clip.timelineStartFrame, frameRate),
-                sourceIn: framesToSeconds(clip.sourceInFrame, frameRate),
-                duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled, effects: clip.effects, keyframes: clip.keyframes, parentClipId: clip.parentClipId, lutId: clip.lutId, lutIntensity: clip.lutIntensity,
-              })),
-            })))
-            setProjectId(manifest.id ?? createId())
-            setProjectName(manifest.name || 'Recovered project')
-            setPlayhead(framesToSeconds(manifest.playheadFrame ?? 0, frameRate))
-            const offline = restoredAssets.filter((asset) => asset.kind !== 'null' && !asset.url).length
-            setNotice(offline
-              ? `Recovered project. ${offline} source file(s) need relinking.`
-              : 'Recovered project and restored its locally stored media.')
-          }
-        }
-      } catch {
-        if (active) setNotice('Local recovery snapshot could not be read; starting a fresh project.')
-      } finally {
-        if (active) setRecoveryReady(true)
-      }
+    const dispose = () => {
+      disposeWorkspaceSession()
+      clearSessionMedia()
     }
-    void recover()
-    return () => { active = false }
+    window.addEventListener('pagehide', dispose)
+    void initializeWorkspaceSession()
+      .then(() => {
+        if (!active) return
+        setWorkspaceStatus('ready')
+        setNotice('Private temporary workspace active. Export Draft before leaving to keep an editable copy.')
+      })
+      .catch((error) => {
+        if (!active) return
+        setWorkspaceStatus('offline')
+        setNotice(error instanceof Error
+          ? 'Temporary cloud session unavailable; editing remains in this tab only. ' + error.message
+          : 'Temporary cloud session unavailable; editing remains in this tab only.')
+      })
+    return () => {
+      active = false
+      window.removeEventListener('pagehide', dispose)
+    }
   }, [])
 
   const allClips = useMemo(() => tracks.flatMap((track) => track.clips.map((clip) => ({ ...clip, trackId: track.id }))), [tracks])
@@ -308,15 +277,18 @@ function Editor() {
     })),
     playheadFrame: secondsToFrames(playhead, projectFrameRate),
   }), [assets, playhead, projectFrameRate, projectId, projectName, projectResolution, tracks])
-
   useEffect(() => {
-    if (!recoveryReady) return
-    try {
-      localStorage.setItem('kyrocut-x1:recovery', JSON.stringify(projectDocument))
-    } catch {
-      setNotice('Automatic recovery storage is full or unavailable. Save a .kcx1 project file manually.')
-    }
-  }, [projectDocument, recoveryReady])
+    if (workspaceStatus !== 'ready') return
+    const timeout = window.setTimeout(() => {
+      void saveWorkspaceManifest(projectDocument).catch((error) => {
+        setNotice(error instanceof Error
+          ? 'Temporary workspace sync paused: ' + error.message
+          : 'Temporary workspace sync paused. Your current tab remains usable.')
+      })
+    }, 650)
+    return () => window.clearTimeout(timeout)
+  }, [projectDocument, workspaceStatus])
+
 
   useEffect(() => {
     const activeVideoIds = new Set(activeVisualClips.filter(({ clip }) =>
@@ -433,7 +405,7 @@ function Editor() {
     setAssets((current) => [...current, ...additions])
     setNotice(storageFailures
       ? `Imported ${additions.length} media item(s), but browser storage could not retain ${storageFailures} file(s). Keep those originals safe.`
-      : `Imported ${additions.length} media item(s) and saved them to browser storage.`)
+      : `Imported ${additions.length} media item(s) and kept them in this temporary session.`)
   }, [])
 
   const addAssetToTimeline = (asset: MediaAsset) => {
@@ -952,7 +924,7 @@ function Editor() {
           : `Opened portable project and restored ${bundledMedia.size} bundled media file(s).${storageFailures ? ' Browser storage could not retain every file; this session can still use them.' : ''}`
         : offline
           ? 'Opened legacy project manifest. Relink ' + offline + ' source media item(s) to preview them.'
-          : 'Opened legacy project and restored matching media from browser storage.')
+          : 'Opened legacy project and restored matching media available in this temporary session.')
     } catch (error) {
       setNotice(error instanceof Error ? `Could not open project: ${error.message}` : 'Could not read this project file.')
     }
@@ -978,7 +950,7 @@ function Editor() {
       setAssets((current) => current.map((item) => updates.get(item.id) ?? item))
       setNotice(storageFailures
         ? 'Relinked ' + updates.size + ' media item(s), but browser storage could not save ' + storageFailures + ' file(s).'
-        : 'Relinked and stored ' + updates.size + ' media item(s) for future sessions.')
+        : 'Relinked ' + updates.size + ' media item(s) in this temporary session.')
     } else {
       setNotice('No matching filenames found. Rename the source files or import them individually.')
     }
@@ -1032,17 +1004,18 @@ function Editor() {
     <main className="kx-editor">
       <header className="kx-topbar">
         <a className="kx-brand" href="/" aria-label="KYROCUT X1 home"><span className="kx-brand-mark"><Clapperboard size={19} /></span><span>KYROCUT <b>X1</b></span></a>
-        <div className="kx-project-title"><input aria-label="Project name" value={projectName} onChange={(event) => setProjectName(event.target.value)} /><span className="kx-save-state">LOCAL PROJECT</span></div>
+        <div className="kx-project-title"><input aria-label="Project name" value={projectName} onChange={(event) => setProjectName(event.target.value)} /><span className="kx-save-state">TEMPORARY SESSION</span></div>
         <div className="kx-top-actions">
           <button className="kx-button kx-button-quiet" onClick={() => setShowCompositionSettings((open) => !open)}><Settings2 size={14} /> Composition</button>
           <a className="kx-button kx-button-quiet" href="/compositor">Compositor</a>
           <button className="kx-button kx-button-quiet" onClick={() => projectInput.current?.click()}><FolderOpen size={15} /> Open</button>
           <input ref={projectInput} hidden type="file" accept=".kcx1,application/json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openProject(file); event.target.value = '' }} />
-          <button className="kx-button kx-button-quiet" onClick={saveProject}><Save size={15} /> Save project</button>
+          <button className="kx-button kx-button-quiet" onClick={saveProject}><Save size={15} /> Export Draft</button>
           <label className="kx-export-format"><span>FORMAT</span><select aria-label="Export format" value={exportFormat} onChange={(event) => setExportFormat(event.target.value as 'webm' | 'mp4')} disabled={isExporting}><option value="mp4">MP4 · H.264/AAC</option><option value="webm">WebM · VP9/Opus</option></select></label>
           <button className="kx-button kx-button-primary" onClick={() => isExporting ? recorderRef.current?.stop() : startExport()}><Sparkles size={15} /> {isExporting ? 'Stop export' : 'Export ' + exportFormat.toUpperCase()}</button>
         </div>
       </header>
+      <div className="kx-session-warning" role="note">TEMPORARY WORKSPACE · Refreshing or leaving clears this session. Export Draft to keep an editable copy.</div>
       {showCompositionSettings && <section className="kx-composition-settings">
         <div className="kx-composition-settings-head"><strong>COMPOSITION SETTINGS</strong><button className="kx-icon-button" onClick={() => setShowCompositionSettings(false)} aria-label="Close composition settings"><X size={14} /></button></div>
         <label>Resolution
