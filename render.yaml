@@ -11,4 +11,3 @@ services:
     dockerContext: .
     autoDeployTrigger: off
     healthCheckPath: /
-    maxShutdownDelaySeconds: 60
