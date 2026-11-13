@@ -50,6 +50,7 @@ function Editor() {
   const [titleFontSize, setTitleFontSize] = useState(88)
   const [shapeColor, setShapeColor] = useState('#d6ad5c')
   const [isExporting, setIsExporting] = useState(false)
+  const [showCompositionSettings, setShowCompositionSettings] = useState(false)
   const [trimDrag, setTrimDrag] = useState<TrimDrag | null>(null)
   const [projectName, setProjectName] = useState('Untitled project')
   const [projectId, setProjectId] = useState<string>(createId())
@@ -782,6 +783,7 @@ function Editor() {
         <a className="kx-brand" href="/" aria-label="KYROCUT X1 home"><span className="kx-brand-mark"><Clapperboard size={19} /></span><span>KYROCUT <b>X1</b></span></a>
         <div className="kx-project-title"><input aria-label="Project name" value={projectName} onChange={(event) => setProjectName(event.target.value)} /><span className="kx-save-state">LOCAL PROJECT</span></div>
         <div className="kx-top-actions">
+          <button className="kx-button kx-button-quiet" onClick={() => setShowCompositionSettings((open) => !open)}><Settings2 size={14} /> Composition</button>
           <a className="kx-button kx-button-quiet" href="/compositor">Compositor</a>
           <button className="kx-button kx-button-quiet" onClick={() => projectInput.current?.click()}><FolderOpen size={15} /> Open</button>
           <input ref={projectInput} hidden type="file" accept=".kcx1,application/json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openProject(file); event.target.value = '' }} />
@@ -789,6 +791,27 @@ function Editor() {
           <button className="kx-button kx-button-primary" onClick={() => isExporting ? recorderRef.current?.stop() : startExport()}><Sparkles size={15} /> {isExporting ? 'Stop export' : 'Export WebM'}</button>
         </div>
       </header>
+      {showCompositionSettings && <section className="kx-composition-settings">
+        <div className="kx-composition-settings-head"><strong>COMPOSITION SETTINGS</strong><button className="kx-icon-button" onClick={() => setShowCompositionSettings(false)} aria-label="Close composition settings"><X size={14} /></button></div>
+        <label>Resolution
+          <select value={`${projectResolution.width}x${projectResolution.height}`} onChange={(event) => { const [width, height] = event.target.value.split('x').map(Number); setProjectResolution({ width, height }) }}>
+            <option value="1280x720">1280 × 720 · HD</option>
+            <option value="1920x1080">1920 × 1080 · Full HD</option>
+            <option value="2560x1440">2560 × 1440 · QHD</option>
+            <option value="3840x2160">3840 × 2160 · 4K UHD</option>
+          </select>
+        </label>
+        <label>Frame rate
+          <select value={`${projectFrameRate.numerator}/${projectFrameRate.denominator}`} onChange={(event) => { const [numerator, denominator] = event.target.value.split('/').map(Number); setProjectFrameRate({ numerator, denominator }) }}>
+            <option value="24/1">24 FPS</option>
+            <option value="25/1">25 FPS</option>
+            <option value="30/1">30 FPS</option>
+            <option value="50/1">50 FPS</option>
+            <option value="60/1">60 FPS</option>
+          </select>
+        </label>
+        <span>{projectResolution.width} × {projectResolution.height} · {formatFrameRate(projectFrameRate)}</span>
+      </section>}
       <div className="kx-menu-row"><span>File</span><span>Edit</span><span>Composition</span><span>Layer</span><span>Effects</span><span>Animation</span><span>View</span><span>Help</span><div className="kx-menu-spacer" /><span className="kx-version">X1 FOUNDATION BUILD</span></div>
 
       <section className="kx-workspace">
