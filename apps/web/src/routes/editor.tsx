@@ -18,7 +18,7 @@ import type { CreativePreset, CreativePresetKind } from '../lib/creative-library
 import {
   AudioLines, ChevronDown, Clapperboard, Film, FolderOpen, ImagePlus, Layers3,
   Minus, Music2, Pause, Play, Plus, Save, Scissors, Settings2, Sparkles, StepBack, StepForward, Trash2,
-  Upload, Video, Volume2, WandSparkles,
+  Upload, Video, Volume2, WandSparkles, X,
 } from 'lucide-react'
 import './editor.css'
 import './editor-extra.css'
@@ -586,10 +586,14 @@ function Editor() {
     setBackgroundRemovalProgress(0)
     try {
       const stored = await getMediaBlob(selectedAsset.id).catch(() => null)
-      const original = stored ?? await fetch(selectedAsset.url).then((response) => {
+      let original: Blob
+      if (stored) {
+        original = stored
+      } else {
+        const response = await fetch(selectedAsset.url)
         if (!response.ok) throw new Error('Could not read the selected image source')
-        return response.blob()
-      })
+        original = await response.blob()
+      }
       if (original.size > 40 * 1024 * 1024) throw new Error('Background removal supports images up to 40 MB')
       const input = new File([original], selectedAsset.name, { type: original.type || selectedAsset.mimeType || 'image/png' })
       if (!['image/png', 'image/jpeg', 'image/webp'].includes(input.type)) throw new Error('Use a PNG, JPEG or WebP image for AI background removal')

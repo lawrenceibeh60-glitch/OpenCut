@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Download, FileJson, Layers3, Plus, Trash2, Unlink, Workflow, X } from 'lucide-react'
+import { ArrowLeft, Check, Download, FileJson, Layers3, Plus, Trash2, Unlink, Workflow, X } from 'lucide-react'
 import './compositor.css'
 
 export const Route = createFileRoute('/compositor')({ component: Compositor })

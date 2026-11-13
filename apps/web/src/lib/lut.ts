@@ -43,7 +43,7 @@ export function parseCubeLut(source: string, id = 'custom-lut'): Lut3D {
     throw new Error('Unsupported .cube directive: ' + parts[0])
   }
   if (!size) throw new Error('The .cube file is missing LUT_3D_SIZE')
-  if (domainMin.some((value, index) => !Number.isFinite(value)) || domainMax.some((value, index) => !Number.isFinite(value) || domainMin[index] >= value)) throw new Error('LUT domain minimum must be lower than its maximum')
+  if (domainMin.some((value) => !Number.isFinite(value)) || domainMax.some((value, index) => !Number.isFinite(value) || domainMin[index] >= value)) throw new Error('LUT domain minimum must be lower than its maximum')
   const expected = size * size * size
   if (rows.length !== expected) throw new Error(`LUT data count mismatch: expected ${expected} RGB rows, found ${rows.length}`)
   const data = new Float32Array(expected * 4)

@@ -3,7 +3,7 @@ import { evaluateClipEffects, evaluateKeyframes } from './clip-animation'
 import type { ClipEffects, ClipKeyframe } from './project-format'
 
 const base: ClipEffects = {
-  volume: 100, brightness: 100, contrast: 100, saturation: 100, blur: 0, grayscale: 0,
+  volume: 100, blendMode: 'normal', brightness: 100, contrast: 100, saturation: 100, blur: 0, grayscale: 0,
   sepia: 0, hueRotate: 0, opacity: 100,
   positionX: 0, positionY: 0, scaleX: 1, scaleY: 1, rotation: 0,
 }

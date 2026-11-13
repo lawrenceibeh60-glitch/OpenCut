@@ -209,7 +209,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
         ? clip.keyframes.map((keyframeValue, keyframeIndex) => {
           const keyframe = record(keyframeValue, 'Keyframe ' + keyframeIndex)
           const frame = integerValue(keyframe.frame, 'Keyframe frame')
-          const property = keyframe.property
+          const property = keyframe.property as ClipKeyframe['property']
           if (property !== 'opacity' && property !== 'volume' && property !== 'positionX' && property !== 'positionY' &&
               property !== 'scaleX' && property !== 'scaleY' && property !== 'rotation' &&
               property !== 'brightness' && property !== 'contrast' && property !== 'saturation' && property !== 'blur' &&
