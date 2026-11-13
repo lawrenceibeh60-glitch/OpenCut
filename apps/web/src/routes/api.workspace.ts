@@ -7,7 +7,7 @@ type WorkspaceAction =
   | { action: 'save'; manifest: WorkspaceManifest }
   | { action: 'upload-url'; assetId: string; name: string; mimeType: string; size: number }
 
-const SESSION_TTL_MINUTES = 45
+const SESSION_TTL_MINUTES = 120
 const MAX_MANIFEST_BYTES = 5 * 1024 * 1024
 let bucketCorsConfigured = false
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), {
@@ -138,7 +138,7 @@ async function handlePost(request: Request) {
       const token = `${crypto.randomUUID().replaceAll('-', '')}${crypto.randomUUID().replaceAll('-', '')}`
       const sessionHash = await hashToken(token)
       await sql`INSERT INTO kyrocut_workspace_sessions (session_hash, manifest, expires_at)
-        VALUES (${sessionHash}, '{}'::jsonb, now() + interval '45 minutes')`
+        VALUES (${sessionHash}, '{}'::jsonb, now() + interval '120 minutes')`
       return json({ token, expiresInSeconds: SESSION_TTL_MINUTES * 60 })
     }
 
@@ -146,7 +146,7 @@ async function handlePost(request: Request) {
     if (!sessionHash) return json({ error: 'Workspace session expired or invalid. Start a new temporary workspace.' }, 401)
 
     if (body?.action === 'touch') {
-      await sql`UPDATE kyrocut_workspace_sessions SET updated_at = now(), expires_at = now() + interval '45 minutes' WHERE session_hash = ${sessionHash}`
+      await sql`UPDATE kyrocut_workspace_sessions SET updated_at = now(), expires_at = now() + interval '120 minutes' WHERE session_hash = ${sessionHash}`
       return json({ ok: true })
     }
 
@@ -167,7 +167,9 @@ async function handlePost(request: Request) {
         return json({ error: 'Invalid media asset metadata.' }, 400)
       }
       const { client, getSignedUrl, bucket } = await s3Client()
-      await ensureBucketCors(client, bucket)
+      try { await ensureBucketCors(client, bucket) } catch (error) {
+        console.warn('KYROCUT bucket CORS could not be updated; existing bucket CORS must allow the editor origin:', error instanceof Error ? error.message : 'unknown error')
+      }
       const { PutObjectCommand } = await import('@aws-sdk/client-s3')
       const safeName = body.name.replace(/[\\/\x00-\x1f]/g, '_').slice(0, 180) || 'media.bin'
       const key = `sessions/${sessionHash}/media/${body.assetId}/${safeName}`
