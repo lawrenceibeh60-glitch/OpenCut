@@ -31,12 +31,17 @@ export function initializeWorkspaceSession(): Promise<string> {
 }
 
 export async function saveWorkspaceManifest(manifest: unknown) {
-  if (!sessionToken) throw new Error('Temporary workspace has not started')
+  await initializeWorkspaceSession()
   await post({ action: 'save', manifest })
 }
 
+export async function touchWorkspaceSession() {
+  await initializeWorkspaceSession()
+  await post({ action: 'touch' })
+}
+
 export async function uploadWorkspaceMedia(id: string, file: Blob, name: string) {
-  if (!sessionToken) return
+  await initializeWorkspaceSession()
   const payload = await post({
     action: 'upload-url',
     assetId: id,
