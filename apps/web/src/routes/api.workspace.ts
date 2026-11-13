@@ -10,6 +10,7 @@ type WorkspaceAction =
 const SESSION_TTL_MINUTES = 120
 const MAX_MANIFEST_BYTES = 5 * 1024 * 1024
 let bucketCorsConfigured = false
+let schemaReady = false
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), {
   status,
   headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
@@ -27,6 +28,7 @@ async function sqlClient() {
 }
 
 async function ensureSchema(sql: Awaited<ReturnType<typeof sqlClient>>) {
+  if (schemaReady) return
   await sql`CREATE TABLE IF NOT EXISTS kyrocut_workspace_sessions (
     session_hash text PRIMARY KEY,
     manifest jsonb NOT NULL DEFAULT '{}'::jsonb,
@@ -35,6 +37,7 @@ async function ensureSchema(sql: Awaited<ReturnType<typeof sqlClient>>) {
     expires_at timestamptz NOT NULL
   )`
   await sql`CREATE INDEX IF NOT EXISTS kyrocut_workspace_sessions_expiry_idx ON kyrocut_workspace_sessions (expires_at)`
+  schemaReady = true
 }
 
 async function hashToken(token: string) {
