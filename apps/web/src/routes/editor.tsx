@@ -64,6 +64,7 @@ function Editor() {
   const [backgroundRemovalProgress, setBackgroundRemovalProgress] = useState(0)
   const [ownedWatermarkConfirmed, setOwnedWatermarkConfirmed] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [gpuPreviewReady, setGpuPreviewReady] = useState(false)
   const [exportFormat, setExportFormat] = useState<'webm' | 'mp4'>('mp4')
   const [showCompositionSettings, setShowCompositionSettings] = useState(false)
   const [trimDrag, setTrimDrag] = useState<TrimDrag | null>(null)
@@ -87,6 +88,19 @@ function Editor() {
   const objectUrls = useRef<string[]>([])
   useEffect(() => () => objectUrls.current.forEach((url) => URL.revokeObjectURL(url)), [])
   useEffect(() => () => gpuCompositorRef.current?.dispose(), [])
+  useEffect(() => {
+    const canvas = exportCanvasRef.current
+    if (!canvas) return
+    try {
+      const compositor = createWebGLCompositor(canvas)
+      if (compositor) {
+        gpuCompositorRef.current = compositor
+        setGpuPreviewReady(true)
+      }
+    } catch {
+      setGpuPreviewReady(false)
+    }
+  }, [])
   useEffect(() => {
     let active = true
     void Promise.all(CREATIVE_LUT_ASSETS.map(async (item) => {
@@ -347,6 +361,25 @@ function Editor() {
       if (media.paused) void media.play().catch(() => { /* video sources without audio tracks remain silent */ })
     }
   }, [activeAudioClips, audioTimelineClips, playhead, playing])
+
+  useEffect(() => {
+    if (isExporting || !gpuPreviewReady || !gpuCompositorRef.current) return
+    const canvas = exportCanvasRef.current
+    if (!canvas) return
+    const scale = Math.min(1, 1280 / projectResolution.width, 720 / projectResolution.height)
+    canvas.width = Math.max(1, Math.round(projectResolution.width * scale))
+    canvas.height = Math.max(1, Math.round(projectResolution.height * scale))
+    const layers = [...activeVisualClips].reverse().flatMap(({ clip }) => {
+      const asset = assets.find((item) => item.id === clip.mediaId)
+      const source = asset?.kind === 'video'
+        ? videoElementsRef.current.get(clip.id)
+        : asset?.kind === 'image' ? imageElementsRef.current.get(clip.id) : undefined
+      if (!source) return []
+      const effects = getClipEffects(clip)
+      return [{ id: clip.id, source, effects, lut: clip.lutId ? loadedLuts[clip.lutId] : undefined, lutStrength: clip.lutIntensity ?? 1 }]
+    })
+    gpuCompositorRef.current.render(canvas.width, canvas.height, layers)
+  }, [isExporting, gpuPreviewReady, activeVisualClips, assets, playhead, tracks, projectResolution, loadedLuts])
 
   const timelineDuration = Math.max(0, ...allClips.filter((clip) => clip.enabled).map((clip) => clip.start + clip.duration))
   useEffect(() => {
@@ -1112,7 +1145,7 @@ function Editor() {
         <section className="kx-center-column">
           <div className="kx-preview-panel">
             <div className="kx-panel-title"><span>COMPOSITION VIEWER</span><span>{projectResolution.width} × {projectResolution.height} <i>·</i> {formatFrameRate(projectFrameRate)}</span></div>
-            <div className="kx-preview-stage">
+            <div className="kx-preview-stage" data-gpu-preview={gpuPreviewReady ? "true" : "false"}>
               {activeVisualClips.length > 0 ? [...activeVisualClips].reverse().map(({ clip }) => {
                 const asset = assets.find((item) => item.id === clip.mediaId)
                 const effects = getClipEffects(clip)
