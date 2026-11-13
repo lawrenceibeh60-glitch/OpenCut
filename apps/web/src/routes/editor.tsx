@@ -1105,7 +1105,24 @@ function Editor() {
         </label>
         <span>{projectResolution.width} × {projectResolution.height} · {formatFrameRate(projectFrameRate)}</span>
       </section>}
-      <nav className="kx-menu-row" aria-label="Editor commands">\n        {([\n          ['File', [['Import media', 'importMedia'], ['Import draft', 'importDraft'], ['Export draft', 'exportDraft'], ['Export video', 'exportVideo']]],\n          ['Edit', [['Split selected clip', 'split'], ['Delete selected clip', 'delete'], ['Reset selected effects', 'resetEffects']]],\n          ['Composition', [['Composition settings', 'composition'], ['Open node compositor', 'compositor']]],\n          ['Layer', [['Add video track', 'videoTrack'], ['Add audio track', 'audioTrack'], ['Add graphics track', 'graphicsTrack'], ['Create null controller', 'nullLayer'], ['Create title layer', 'titleLayer']]],\n          ['Effects', [['Open effects panel', 'effectsTab'], ['Reset selected effects', 'resetEffects']]],\n          ['Animation', [['Add opacity keyframe', 'keyframe']]],\n          ['View', [['Viewer settings', 'viewer'], ['Timeline zoom in', 'zoomIn'], ['Timeline zoom out', 'zoomOut'], ['Fit timeline zoom', 'fitTimeline']]],\n          ['Help', [['Keyboard shortcuts', 'shortcuts']]]\n        ] as [EditorMenu, [string, string][]][]).map(([menu, items]) => (\n          <div className="kx-menu-item" key={menu}>\n            <button type="button" aria-expanded={activeMenu === menu} onClick={() => setActiveMenu((current) => current === menu ? null : menu)}>{menu}</button>\n            {activeMenu === menu && <div className="kx-menu-dropdown">{items.map(([label, action]) => <button type="button" key={action + label} onClick={() => runMenuAction(action)}>{label}</button>)}</div>}\n          </div>\n        ))}\n        <div className="kx-menu-spacer" /><span className="kx-version">X1 FOUNDATION BUILD</span>\n      </nav>
+      <nav className="kx-menu-row" aria-label="Editor commands">
+        {([
+          ['File', [['Import media', 'importMedia'], ['Import draft', 'importDraft'], ['Export draft', 'exportDraft'], ['Export video', 'exportVideo']]],
+          ['Edit', [['Split selected clip', 'split'], ['Delete selected clip', 'delete'], ['Reset selected effects', 'resetEffects']]],
+          ['Composition', [['Composition settings', 'composition'], ['Open node compositor', 'compositor']]],
+          ['Layer', [['Add video track', 'videoTrack'], ['Add audio track', 'audioTrack'], ['Add graphics track', 'graphicsTrack'], ['Create null controller', 'nullLayer'], ['Create title layer', 'titleLayer']]],
+          ['Effects', [['Open effects panel', 'effectsTab'], ['Reset selected effects', 'resetEffects']]],
+          ['Animation', [['Add opacity keyframe', 'keyframe']]],
+          ['View', [['Viewer settings', 'viewer'], ['Timeline zoom in', 'zoomIn'], ['Timeline zoom out', 'zoomOut'], ['Fit timeline zoom', 'fitTimeline']]],
+          ['Help', [['Keyboard shortcuts', 'shortcuts']]]
+        ] as [EditorMenu, [string, string][]][]).map(([menu, items]) => (
+          <div className="kx-menu-item" key={menu}>
+            <button type="button" aria-expanded={activeMenu === menu} onClick={() => setActiveMenu((current) => current === menu ? null : menu)}>{menu}</button>
+            {activeMenu === menu && <div className="kx-menu-dropdown">{items.map(([label, action]) => <button type="button" key={action + label} onClick={() => runMenuAction(action)}>{label}</button>)}</div>}
+          </div>
+        ))}
+        <div className="kx-menu-spacer" /><span className="kx-version">X1 FOUNDATION BUILD</span>
+      </nav>
 
       <section className="kx-workspace" style={{ '--kx-media-width': mediaPanelWidth + 'px', '--kx-inspector-width': inspectorPanelWidth + 'px' } as React.CSSProperties}>
         <aside className="kx-panel kx-media-panel">
@@ -1184,7 +1201,8 @@ function Editor() {
           </div>}
         </aside>
 
-        <div className="kx-resize-handle vertical" role="separator" aria-orientation="vertical" aria-label="Resize media panel" onPointerDown={(event) => { event.preventDefault(); setResizeDrag({ side: 'media', startX: event.clientX, startWidth: mediaPanelWidth }) }} />\n        <section className="kx-center-column" ref={centerColumnRef}>
+        <div className="kx-resize-handle vertical" role="separator" aria-orientation="vertical" aria-label="Resize media panel" onPointerDown={(event) => { event.preventDefault(); setResizeDrag({ side: 'media', startX: event.clientX, startWidth: mediaPanelWidth }) }} />
+        <section className="kx-center-column" ref={centerColumnRef}>
           <div className="kx-preview-panel" style={{ flex: '0 0 ' + previewShare + '%' }}>
             <div className="kx-panel-title"><span>COMPOSITION VIEWER</span><span>{projectResolution.width} × {projectResolution.height} <i>·</i> {formatFrameRate(projectFrameRate)}</span></div>
             <div className="kx-preview-stage" data-gpu-preview={gpuPreviewReady ? "true" : "false"} style={{ background: viewerBackground }}>
