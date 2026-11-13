@@ -327,3 +327,12 @@
   font-size: 11px; line-height: 1;
 }
 .kx-keyframe-button:hover { color: #ffe0a0; border-color: #d6ad5c; }
+
+
+.kx-clip { position: absolute; }
+.kx-keyframe-marker {
+  position: absolute; bottom: 2px; z-index: 3;
+  color: #ffe0a0; font-size: 8px; line-height: 1;
+  text-shadow: 0 1px 3px #000;
+  pointer-events: none;
+}
