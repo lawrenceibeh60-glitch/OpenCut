@@ -86,7 +86,7 @@ async function ensureBucketCors(client: import('@aws-sdk/client-s3').S3Client, b
   bucketCorsConfigured = true
 }
 
-async function deleteSessionObjects(sessionHash: string) {
+async function deleteSessionObjects(sessionHash: string): Promise<boolean> {
   try {
     const { client, bucket } = await s3Client()
     const { ListObjectsV2Command, DeleteObjectsCommand } = await import('@aws-sdk/client-s3')
@@ -103,16 +103,20 @@ async function deleteSessionObjects(sessionHash: string) {
       }
       continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined
     } while (continuationToken)
+    return true
   } catch (error) {
-    // Expired database rows are still removed. Bucket lifecycle policies remain a
-    // second cleanup boundary if an object deletion is temporarily unavailable.
     console.error('KYROCUT temporary asset cleanup failed:', error instanceof Error ? error.message : 'unknown error')
+    return false
   }
 }
 
 async function cleanupExpired(sql: Awaited<ReturnType<typeof sqlClient>>) {
-  const expired = await sql`DELETE FROM kyrocut_workspace_sessions WHERE expires_at < now() RETURNING session_hash` as Array<{ session_hash: string }>
-  for (const row of expired) await deleteSessionObjects(row.session_hash)
+  const expired = await sql`SELECT session_hash FROM kyrocut_workspace_sessions WHERE expires_at < now() LIMIT 50` as Array<{ session_hash: string }>
+  for (const row of expired) {
+    if (await deleteSessionObjects(row.session_hash)) {
+      await sql`DELETE FROM kyrocut_workspace_sessions WHERE session_hash = ${row.session_hash} AND expires_at < now()`
+    }
+  }
 }
 
 async function authorizedSession(request: Request, sql: Awaited<ReturnType<typeof sqlClient>>) {
@@ -142,7 +146,7 @@ async function handlePost(request: Request) {
     if (!sessionHash) return json({ error: 'Workspace session expired or invalid. Start a new temporary workspace.' }, 401)
 
     if (body?.action === 'touch') {
-      await sql`UPDATE kyrocut_workspace_sessions SET updated_at = now(), expires_at = now() + (${SESSION_TTL_MINUTES} || ' minutes')::interval WHERE session_hash = ${sessionHash}`
+      await sql`UPDATE kyrocut_workspace_sessions SET updated_at = now(), expires_at = now() + interval '45 minutes' WHERE session_hash = ${sessionHash}`
       return json({ ok: true })
     }
 
@@ -159,7 +163,7 @@ async function handlePost(request: Request) {
     }
 
     if (body?.action === 'upload-url') {
-      if (!/^[a-zA-Z0-9_-]{1,120}$/.test(body.assetId) || !Number.isSafeInteger(body.size) || body.size < 0 || body.size > 2 * 1024 * 1024 * 1024) {
+      if (typeof body.assetId !== 'string' || !/^[a-zA-Z0-9_-]{1,120}$/.test(body.assetId) || typeof body.name !== 'string' || !Number.isSafeInteger(body.size) || body.size < 0 || body.size > 2 * 1024 * 1024 * 1024) {
         return json({ error: 'Invalid media asset metadata.' }, 400)
       }
       const { client, getSignedUrl, bucket } = await s3Client()
@@ -190,8 +194,9 @@ async function handleDelete(request: Request) {
     await ensureSchema(sql)
     const sessionHash = await authorizedSession(request, sql)
     if (!sessionHash) return new Response(null, { status: 204 })
-    await sql`DELETE FROM kyrocut_workspace_sessions WHERE session_hash = ${sessionHash}`
-    await deleteSessionObjects(sessionHash)
+    const cleaned = await deleteSessionObjects(sessionHash)
+    if (cleaned) await sql`DELETE FROM kyrocut_workspace_sessions WHERE session_hash = ${sessionHash}`
+    else await sql`UPDATE kyrocut_workspace_sessions SET expires_at = now() - interval '1 second' WHERE session_hash = ${sessionHash}`
     return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } })
   } catch {
     return new Response(null, { status: 204 })
