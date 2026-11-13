@@ -2,16 +2,12 @@ name: KYROCUT X1 Web Studio
 
 on:
   pull_request:
-    paths:
-      - "apps/web/**"
-      - ".github/workflows/web-studio-ci.yml"
+    branches: [main]
   push:
     branches:
       - main
       - "feat/kyrocut-x1-*"
-    paths:
-      - "apps/web/**"
-      - ".github/workflows/web-studio-ci.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -22,7 +18,7 @@ concurrency:
 
 jobs:
   web:
-    name: Typecheck and production build
+    name: Web tests, typecheck, and production build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -42,3 +38,25 @@ jobs:
         run: bunx tsc --noEmit
       - name: Production build
         run: bun run build
+
+  rust-renderer:
+    name: Rust renderer tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test -p kyrocut-render
+
+  rust-wasm:
+    name: Rust WebAssembly bridge build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked
+      - name: Build browser WebAssembly package
+        working-directory: crates/kyrocut-render
+        run: wasm-pack build --target web --out-dir ../../apps/web/src/generated/renderer-wasm --out-name kyrocut_renderer --release
