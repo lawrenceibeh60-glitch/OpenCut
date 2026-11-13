@@ -209,6 +209,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
             opacity: [0, 100], positionX: [-100, 100], positionY: [-100, 100],
             scaleX: [0.1, 5], scaleY: [0.1, 5], rotation: [-180, 180],
           }
+          if (typeof keyframe.value !== 'number') throw new Error('Keyframe value must be a number')
           const value = boundedNumber(keyframe.value, 'Keyframe value', bounds[property][0], bounds[property][1], 0)
           const interpolation = keyframe.interpolation === undefined ? 'linear' : keyframe.interpolation
           if (interpolation !== 'linear' && interpolation !== 'hold') {
