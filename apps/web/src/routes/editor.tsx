@@ -1110,7 +1110,7 @@ function Editor() {
           ['File', [['Import media', 'importMedia'], ['Import draft', 'importDraft'], ['Export draft', 'exportDraft'], ['Export video', 'exportVideo']]],
           ['Edit', [['Split selected clip', 'split'], ['Delete selected clip', 'delete'], ['Reset selected effects', 'resetEffects']]],
           ['Composition', [['Composition settings', 'composition'], ['Open node compositor', 'compositor']]],
-          ['Layer', [['Add video track', 'videoTrack'], ['Add audio track', 'audioTrack'], ['Add graphics track', 'graphicsTrack'], ['Create null controller', 'nullLayer'], ['Create title layer', 'titleLayer']]],
+          ['Layer', [['Add video track', 'videoTrack'], ['Add audio track', 'audioTrack'], ['Add graphics track', 'graphicsTrack'], ['Create null controller', 'nullLayer'], ['Open text tools', 'titleLayer']]],
           ['Effects', [['Open effects panel', 'effectsTab'], ['Reset selected effects', 'resetEffects']]],
           ['Animation', [['Add opacity keyframe', 'keyframe']]],
           ['View', [['Viewer settings', 'viewer'], ['Timeline zoom in', 'zoomIn'], ['Timeline zoom out', 'zoomOut'], ['Fit timeline zoom', 'fitTimeline']]],
