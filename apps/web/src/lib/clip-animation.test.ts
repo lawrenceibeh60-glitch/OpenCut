@@ -12,6 +12,8 @@ const keys: ClipKeyframe[] = [
   { frame: 30, property: 'positionX', value: 60, interpolation: 'linear' },
   { frame: 0, property: 'opacity', value: 0, interpolation: 'hold' },
   { frame: 30, property: 'opacity', value: 100, interpolation: 'linear' },
+  { frame: 0, property: 'volume', value: 100, interpolation: 'linear' },
+  { frame: 30, property: 'volume', value: 0, interpolation: 'linear' },
 ]
 
 describe('clip keyframe evaluation', () => {
@@ -27,7 +29,7 @@ describe('clip keyframe evaluation', () => {
     expect(evaluateKeyframes(0, keys, 'positionX', 90)).toBe(60)
   })
   it('evaluates multiple transform and opacity properties together', () => {
-    expect(evaluateClipEffects(base, keys, 15)).toMatchObject({ positionX: 30, opacity: 0 })
+    expect(evaluateClipEffects(base, keys, 15)).toMatchObject({ positionX: 30, opacity: 0, volume: 50 })
   })
   it('returns the base effect value when no keys exist', () => {
     expect(evaluateKeyframes(12, [], 'rotation', 10)).toBe(12)
