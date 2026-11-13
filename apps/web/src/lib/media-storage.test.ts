@@ -1,10 +1,16 @@
-import { describe, expect, it } from 'vitest'
-import 'fake-indexeddb/auto'
-import { deleteMediaBlob, getMediaBlob, saveMediaBlob } from './media-storage'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-describe('KYROCUT browser media storage', () => {
-  it('persists and restores an imported media blob by stable asset ID', async () => {
-    const id = 'media-persistence-round-trip'
+vi.mock('./workspace-session', () => ({
+  uploadWorkspaceMedia: vi.fn().mockResolvedValue(undefined),
+}))
+
+import { clearSessionMedia, deleteMediaBlob, getMediaBlob, saveMediaBlob } from './media-storage'
+
+describe('KYROCUT temporary media storage', () => {
+  beforeEach(() => clearSessionMedia())
+
+  it('keeps imported media available during the current page session', async () => {
+    const id = 'media-session-round-trip'
     const original = new Blob(['KYROCUT media bytes'], { type: 'video/webm' })
 
     await saveMediaBlob(id, original, 'shot.webm')
@@ -15,12 +21,21 @@ describe('KYROCUT browser media storage', () => {
     expect(await restored?.text()).toBe('KYROCUT media bytes')
   })
 
+  it('starts empty after the page session is cleared', async () => {
+    const id = 'media-session-refresh'
+    await saveMediaBlob(id, new Blob(['unsaved']), 'unsaved.webm')
+
+    clearSessionMedia()
+
+    expect(await getMediaBlob(id)).toBeNull()
+  })
+
   it('returns null for an asset that has not been stored', async () => {
     expect(await getMediaBlob('media-does-not-exist')).toBeNull()
   })
 
-  it('removes a stored media blob', async () => {
-    const id = 'media-persistence-delete'
+  it('removes a media blob from the current page session', async () => {
+    const id = 'media-session-delete'
     await saveMediaBlob(id, new Blob(['remove me']), 'remove.txt')
     await deleteMediaBlob(id)
 

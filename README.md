@@ -89,3 +89,20 @@ KYROCUT X1 began from the open-source OpenCut rewrite. The original project is a
 ## License
 
 MIT. See LICENSE.
+
+
+## Temporary browser workspaces
+
+The web editor does not require user accounts. Each editor page load creates a new isolated workspace session with an opaque in-memory bearer token. Project manifests are autosaved to Neon Postgres under a hash of that session token, while imported media is uploaded to a session-specific prefix in the configured S3-compatible bucket. Neither the token nor unsaved project data is stored in browser localStorage or IndexedDB.
+
+Sessions have a 2-hour idle expiry and are refreshed while the editor is active. The browser attempts to delete the session and its media when the page is closed or refreshed; expired sessions are also cleaned up when a new workspace is created. If the browser or device exits unexpectedly, the idle expiry prevents the old session from being resumed. The web editor deliberately does not restore a previous session after refresh.
+
+Use **Export Draft** to download a portable `.kcx1` archive containing the project manifest and available media. Use **Import Draft** to continue from that archive later. Export Video produces the rendered video separately. Keep the downloaded draft somewhere safe; the online workspace is temporary.
+
+Configure these variables as private Render environment variables on the web service (never commit their values):
+
+- `DATABASE_URL_POOLED` (preferred for runtime queries) and `DATABASE_URL` (fallback)
+- `AWS_ENDPOINT_URL_S3`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+- `AWS_REGION`, `S3_BUCKET`
+
+The API creates the `kyrocut_workspace_sessions` table and expiry index automatically. It does not create user accounts or a permanent project library.

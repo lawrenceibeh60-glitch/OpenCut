@@ -9,10 +9,16 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ApiWorkspaceRouteImport } from './routes/api.workspace'
 import { Route as CompositorRouteImport } from './routes/compositor'
 import { Route as EditorRouteImport } from './routes/editor'
 import { Route as IndexRouteImport } from './routes/index'
 
+const ApiWorkspaceRoute = ApiWorkspaceRouteImport.update({
+  id: '/api/workspace',
+  path: '/api/workspace',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CompositorRoute = CompositorRouteImport.update({
   id: '/compositor',
   path: '/compositor',
@@ -30,16 +36,19 @@ const IndexRoute = IndexRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
+  '/api/workspace': typeof ApiWorkspaceRoute
   '/': typeof IndexRoute
   '/compositor': typeof CompositorRoute
   '/editor': typeof EditorRoute
 }
 export interface FileRoutesByTo {
+  '/api/workspace': typeof ApiWorkspaceRoute
   '/': typeof IndexRoute
   '/compositor': typeof CompositorRoute
   '/editor': typeof EditorRoute
 }
 export interface FileRoutesById {
+  '/api/workspace': typeof ApiWorkspaceRoute
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/compositor': typeof CompositorRoute
@@ -47,13 +56,14 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/compositor' | '/editor'
+  fullPaths: '/' | '/api/workspace' | '/compositor' | '/editor'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/compositor' | '/editor'
-  id: '__root__' | '/' | '/compositor' | '/editor'
+  to: '/' | '/api/workspace' | '/compositor' | '/editor'
+  id: '__root__' | '/' | '/api/workspace' | '/compositor' | '/editor'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  ApiWorkspaceRoute: typeof ApiWorkspaceRoute
   IndexRoute: typeof IndexRoute
   EditorRoute: typeof EditorRoute
   CompositorRoute: typeof CompositorRoute
@@ -61,6 +71,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/api/workspace': {
+      id: '/api/workspace'
+      path: '/api/workspace'
+      fullPath: '/api/workspace'
+      preLoaderRoute: typeof ApiWorkspaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/compositor': {
       id: '/compositor'
       path: '/compositor'
@@ -86,6 +103,7 @@ declare module '@tanstack/react-router' {
 }
 
 const rootRouteChildren: RootRouteChildren = {
+  ApiWorkspaceRoute: ApiWorkspaceRoute,
   IndexRoute: IndexRoute,
   EditorRoute: EditorRoute,
   CompositorRoute: CompositorRoute,
