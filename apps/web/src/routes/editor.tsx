@@ -10,7 +10,7 @@ import { parseCubeLut, type Lut3D } from '../lib/lut'
 import { applyClipTrim } from '../lib/timeline-editing'
 import { createWebGLCompositor, type WebGLCompositor } from '../lib/webgl-compositor'
 import { clearSessionMedia, getMediaBlob, saveMediaBlob } from '../lib/media-storage'
-import { disposeWorkspaceSession, initializeWorkspaceSession, saveWorkspaceManifest } from '../lib/workspace-session'
+import { disposeWorkspaceSession, initializeWorkspaceSession, saveWorkspaceManifest, touchWorkspaceSession } from '../lib/workspace-session'
 import { clampTimelineTime, getActivePlaybackClips, getPrimaryPreviewClip } from '../lib/timeline-playback'
 import { decodeProjectArchive, encodeProjectArchive, isProjectArchive } from '../lib/project-archive'
 import { CREATIVE_ASSET_SOURCES, CREATIVE_FONTS, CREATIVE_LUT_ASSETS, CREATIVE_PRESETS } from '../lib/creative-library'
@@ -161,6 +161,11 @@ function Editor() {
       clearSessionMedia()
     }
     window.addEventListener('pagehide', dispose)
+    const heartbeat = window.setInterval(() => {
+      void touchWorkspaceSession().catch((error) => {
+        if (active) setNotice(error instanceof Error ? 'Temporary workspace heartbeat failed: ' + error.message : 'Temporary workspace heartbeat failed.')
+      })
+    }, 5 * 60 * 1000)
     void initializeWorkspaceSession()
       .then(() => {
         if (!active) return
@@ -177,6 +182,7 @@ function Editor() {
     return () => {
       active = false
       window.removeEventListener('pagehide', dispose)
+      window.clearInterval(heartbeat)
     }
   }, [])
 
@@ -1004,11 +1010,11 @@ function Editor() {
     <main className="kx-editor">
       <header className="kx-topbar">
         <a className="kx-brand" href="/" aria-label="KYROCUT X1 home"><span className="kx-brand-mark"><Clapperboard size={19} /></span><span>KYROCUT <b>X1</b></span></a>
-        <div className="kx-project-title"><input aria-label="Project name" value={projectName} onChange={(event) => setProjectName(event.target.value)} /><span className="kx-save-state">TEMPORARY SESSION</span></div>
+        <div className="kx-project-title"><input aria-label="Project name" value={projectName} onChange={(event) => setProjectName(event.target.value)} /><span className="kx-save-state">{workspaceStatus === 'ready' ? 'TEMPORARY SESSION' : workspaceStatus === 'starting' ? 'STARTING SESSION' : 'LOCAL TAB ONLY'}</span></div>
         <div className="kx-top-actions">
           <button className="kx-button kx-button-quiet" onClick={() => setShowCompositionSettings((open) => !open)}><Settings2 size={14} /> Composition</button>
           <a className="kx-button kx-button-quiet" href="/compositor">Compositor</a>
-          <button className="kx-button kx-button-quiet" onClick={() => projectInput.current?.click()}><FolderOpen size={15} /> Open</button>
+          <button className="kx-button kx-button-quiet" onClick={() => projectInput.current?.click()}><FolderOpen size={15} /> Import Draft</button>
           <input ref={projectInput} hidden type="file" accept=".kcx1,application/json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void openProject(file); event.target.value = '' }} />
           <button className="kx-button kx-button-quiet" onClick={saveProject}><Save size={15} /> Export Draft</button>
           <label className="kx-export-format"><span>FORMAT</span><select aria-label="Export format" value={exportFormat} onChange={(event) => setExportFormat(event.target.value as 'webm' | 'mp4')} disabled={isExporting}><option value="mp4">MP4 · H.264/AAC</option><option value="webm">WebM · VP9/Opus</option></select></label>
