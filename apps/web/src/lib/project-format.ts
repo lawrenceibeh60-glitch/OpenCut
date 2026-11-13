@@ -1,9 +1,18 @@
 import type { RationalFrameRate } from './timebase'
 
-export type ProjectMediaKind = 'video' | 'audio' | 'image'
+export type ProjectMediaKind = 'video' | 'audio' | 'image' | 'null'
 export type ProjectTrackKind = 'video' | 'audio' | 'graphics' | 'adjustment'
 
+export type ClipKeyframe = {
+  frame: number
+  property: 'opacity' | 'volume' | 'positionX' | 'positionY' | 'scaleX' | 'scaleY' | 'rotation' | 'brightness' | 'contrast' | 'saturation' | 'blur' | 'grayscale' | 'sepia' | 'hueRotate'
+  value: number
+  interpolation: 'linear' | 'hold'
+}
+
 export type ClipEffects = {
+  volume: number
+  blendMode: 'normal' | 'multiply' | 'screen' | 'add'
   brightness: number
   contrast: number
   saturation: number
@@ -12,6 +21,11 @@ export type ClipEffects = {
   sepia: number
   hueRotate: number
   opacity: number
+  positionX: number
+  positionY: number
+  scaleX: number
+  scaleY: number
+  rotation: number
 }
 
 export type ProjectManifest = {
@@ -45,6 +59,10 @@ export type ProjectManifest = {
       durationFrames: number
       enabled: boolean
       effects?: ClipEffects
+      keyframes?: ClipKeyframe[]
+      parentClipId?: string
+      lutId?: string
+      lutIntensity?: number
     }>
   }>
   playheadFrame: number
@@ -121,7 +139,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
     if (mediaIds.has(id)) throw new Error('Duplicate media ID: ' + id)
     mediaIds.add(id)
     const kind = value.kind
-    if (kind !== 'video' && kind !== 'audio' && kind !== 'image') {
+    if (kind !== 'video' && kind !== 'audio' && kind !== 'image' && kind !== 'null') {
       throw new Error('Unsupported media kind for ' + id)
     }
     const mediaKind = kind as ProjectMediaKind
@@ -165,6 +183,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
       }
       const effectsValue = clip.effects === undefined ? undefined : record(clip.effects, 'Clip effects')
       const effects: ClipEffects | undefined = effectsValue ? {
+        blendMode: effectsValue.blendMode === undefined ? 'normal' : effectsValue.blendMode as ClipEffects['blendMode'],
         brightness: boundedNumber(effectsValue.brightness, 'Effect brightness', 0, 200, 100),
         contrast: boundedNumber(effectsValue.contrast, 'Effect contrast', 0, 200, 100),
         saturation: boundedNumber(effectsValue.saturation, 'Effect saturation', 0, 200, 100),
@@ -173,11 +192,56 @@ export function parseProjectManifest(source: string): ProjectManifest {
         sepia: boundedNumber(effectsValue.sepia, 'Effect sepia', 0, 100, 0),
         hueRotate: boundedNumber(effectsValue.hueRotate, 'Effect hue rotation', 0, 360, 0),
         opacity: boundedNumber(effectsValue.opacity, 'Effect opacity', 0, 100, 100),
+        volume: boundedNumber(effectsValue.volume, 'Effect volume', 0, 200, 100),
+        positionX: boundedNumber(effectsValue.positionX, 'Effect position X', -100, 100, 0),
+        positionY: boundedNumber(effectsValue.positionY, 'Effect position Y', -100, 100, 0),
+        scaleX: boundedNumber(effectsValue.scaleX, 'Effect scale X', 0.1, 5, 1),
+        scaleY: boundedNumber(effectsValue.scaleY, 'Effect scale Y', 0.1, 5, 1),
+        rotation: boundedNumber(effectsValue.rotation, 'Effect rotation', -180, 180, 0),
       } : undefined
+      if (effects && !['normal', 'multiply', 'screen', 'add'].includes(effects.blendMode)) throw new Error('Unsupported clip blend mode')
+      if (clip.lutIntensity !== undefined && clip.lutId === undefined) throw new Error('LUT intensity requires a LUT ID')
+      if (clip.keyframes !== undefined && !Array.isArray(clip.keyframes)) {
+        throw new Error('Clip keyframes must be an array')
+      }
+      const keyframeIdentities = new Set<string>()
+      const keyframes: ClipKeyframe[] | undefined = Array.isArray(clip.keyframes)
+        ? clip.keyframes.map((keyframeValue, keyframeIndex) => {
+          const keyframe = record(keyframeValue, 'Keyframe ' + keyframeIndex)
+          const frame = integerValue(keyframe.frame, 'Keyframe frame')
+          const property = keyframe.property
+          if (property !== 'opacity' && property !== 'volume' && property !== 'positionX' && property !== 'positionY' &&
+              property !== 'scaleX' && property !== 'scaleY' && property !== 'rotation' &&
+              property !== 'brightness' && property !== 'contrast' && property !== 'saturation' && property !== 'blur' &&
+              property !== 'grayscale' && property !== 'sepia' && property !== 'hueRotate') {
+            throw new Error('Unsupported keyframe property')
+          }
+          const bounds: Record<ClipKeyframe['property'], [number, number]> = {
+            opacity: [0, 100], volume: [0, 200], positionX: [-100, 100], positionY: [-100, 100],
+            scaleX: [0.1, 5], scaleY: [0.1, 5], rotation: [-180, 180],
+            brightness: [0, 200], contrast: [0, 200], saturation: [0, 200], blur: [0, 20],
+            grayscale: [0, 100], sepia: [0, 100], hueRotate: [0, 360],
+          }
+          if (typeof keyframe.value !== 'number') throw new Error('Keyframe value must be a number')
+          const value = boundedNumber(keyframe.value, 'Keyframe value', bounds[property][0], bounds[property][1], 0)
+          const interpolation = keyframe.interpolation === undefined ? 'linear' : keyframe.interpolation
+          if (interpolation !== 'linear' && interpolation !== 'hold') {
+            throw new Error('Unsupported keyframe interpolation')
+          }
+          const identity = property + ':' + frame
+          if (keyframeIdentities.has(identity)) throw new Error('Duplicate keyframe for ' + property + ' at frame ' + frame)
+          keyframeIdentities.add(identity)
+          return { frame, property, value, interpolation }
+        }).sort((a, b) => a.frame - b.frame)
+        : undefined
       return {
         id: clipId, mediaId, timelineStartFrame, sourceInFrame, durationFrames,
         enabled: clip.enabled === undefined ? true : booleanValue(clip.enabled, 'Clip enabled state'),
         ...(effects ? { effects } : {}),
+        ...(keyframes?.length ? { keyframes } : {}),
+        ...(clip.parentClipId === undefined ? {} : { parentClipId: stringValue(clip.parentClipId, 'Parent null-layer ID') }),
+        ...(clip.lutId === undefined ? {} : { lutId: stringValue(clip.lutId, 'LUT ID') }),
+        ...(clip.lutIntensity === undefined ? {} : { lutIntensity: boundedNumber(clip.lutIntensity, 'LUT intensity', 0, 1, 1) }),
       }
     })
     return {
@@ -189,6 +253,20 @@ export function parseProjectManifest(source: string): ProjectManifest {
       clips,
     }
   })
+
+  const clipById = new Map(tracks.flatMap((track) => track.clips.map((clip) => [clip.id, clip] as const)))
+  for (const track of tracks) for (const clip of track.clips) {
+    if (!clip.parentClipId) continue
+    if (clip.parentClipId === clip.id) throw new Error('A layer cannot parent itself')
+    let cursor = clipById.get(clip.parentClipId)
+    if (!cursor || media.find((item) => item.id === cursor!.mediaId)?.kind !== 'null') throw new Error('Parent layer must be a null layer: ' + clip.parentClipId)
+    const visited = new Set([clip.id])
+    while (cursor) {
+      if (visited.has(cursor.id)) throw new Error('Null-layer parenting cannot contain cycles')
+      visited.add(cursor.id)
+      cursor = cursor.parentClipId ? clipById.get(cursor.parentClipId) : undefined
+    }
+  }
 
   const manifest: ProjectManifest = {
     format: 'kyrocut-project',

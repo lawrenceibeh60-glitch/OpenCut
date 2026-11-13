@@ -61,12 +61,35 @@ describe('KYROCUT X1 project manifest', () => {
         ...validProject.tracks[0],
         clips: [{
           ...validProject.tracks[0].clips[0],
-          effects: { brightness: 125, contrast: 90, saturation: 140, blur: 2.5, grayscale: 0, sepia: 15, hueRotate: 210, opacity: 80 },
+          effects: { volume: 125, blendMode: 'screen', brightness: 125, contrast: 90, saturation: 140, blur: 2.5, grayscale: 0, sepia: 15, hueRotate: 210, opacity: 80, positionX: 12, positionY: -8, scaleX: 1.5, scaleY: 0.75, rotation: 45 },
+          keyframes: [
+            { frame: 0, property: 'positionX', value: 0, interpolation: 'linear' },
+            { frame: 30, property: 'positionX', value: 25, interpolation: 'hold' },
+            { frame: 0, property: 'brightness', value: 100, interpolation: 'linear' },
+          ],
         }],
       }],
     }
     const parsed = parseProjectManifest(JSON.stringify(withEffects))
     expect(parsed.tracks[0].clips[0].effects).toEqual(withEffects.tracks[0].clips[0].effects)
+    expect(parsed.tracks[0].clips[0].keyframes).toEqual(withEffects.tracks[0].clips[0].keyframes)
+  })
+
+  it('fills transform defaults when opening older projects with legacy effect fields', () => {
+    const legacy = {
+      ...validProject,
+      tracks: [{
+        ...validProject.tracks[0],
+        clips: [{
+          ...validProject.tracks[0].clips[0],
+          effects: { brightness: 100, contrast: 100, saturation: 100, blur: 0, grayscale: 0, sepia: 0, hueRotate: 0, opacity: 100 },
+        }],
+      }],
+    }
+    const parsed = parseProjectManifest(JSON.stringify(legacy))
+    expect(parsed.tracks[0].clips[0].effects).toMatchObject({
+      positionX: 0, positionY: 0, scaleX: 1, scaleY: 1, rotation: 0,
+    })
   })
 
   it('rejects out-of-range clip effect values', () => {
@@ -78,6 +101,56 @@ describe('KYROCUT X1 project manifest', () => {
       }],
     }
     expect(() => parseProjectManifest(JSON.stringify(invalid))).toThrow('Effect brightness')
+  })
+
+  it('rejects duplicate keyframes for the same property and frame', () => {
+    const invalid = {
+      ...validProject,
+      tracks: [{
+        ...validProject.tracks[0],
+        clips: [{
+          ...validProject.tracks[0].clips[0],
+          keyframes: [
+            { frame: 12, property: 'rotation', value: 10, interpolation: 'linear' },
+            { frame: 12, property: 'rotation', value: 20, interpolation: 'hold' },
+          ],
+        }],
+      }],
+    }
+    expect(() => parseProjectManifest(JSON.stringify(invalid))).toThrow('Duplicate keyframe')
+  })
+
+  it('persists null controller media and child parent references', () => {
+    const project = { ...validProject, media: [...validProject.media, { id: 'null-media', name: 'Null Controller', kind: 'null', size: 0, durationFrames: 900, mimeType: 'application/x-kyrocut-null', locator: 'media/null' }], tracks: [...validProject.tracks.map((track) => ({ ...track, clips: track.clips.map((clip) => ({ ...clip, parentClipId: 'null-clip' })) })), { id: 'adj-1', name: 'ADJ1', kind: 'adjustment', muted: false, locked: false, clips: [{ id: 'null-clip', mediaId: 'null-media', timelineStartFrame: 0, sourceInFrame: 0, durationFrames: 900 }] }] }
+    const parsed = parseProjectManifest(JSON.stringify(project))
+    expect(parsed.media[1].kind).toBe('null')
+    expect(parsed.tracks[0].clips[0].parentClipId).toBe('null-clip')
+  })
+
+  it('persists a selected 3D LUT and bounded intensity', () => {
+    const withLut = {
+      ...validProject,
+      tracks: [{
+        ...validProject.tracks[0],
+        clips: [{ ...validProject.tracks[0].clips[0], lutId: 'kodak-2393', lutIntensity: 0.65 }],
+      }],
+    }
+    const parsed = parseProjectManifest(JSON.stringify(withLut))
+    expect(parsed.tracks[0].clips[0].lutId).toBe('kodak-2393')
+    expect(parsed.tracks[0].clips[0].lutIntensity).toBe(0.65)
+  })
+
+  it('rejects invalid LUT intensity and orphan intensity values', () => {
+    const tooStrong = {
+      ...validProject,
+      tracks: [{ ...validProject.tracks[0], clips: [{ ...validProject.tracks[0].clips[0], lutId: 'kodak-2393', lutIntensity: 1.5 }] }],
+    }
+    const orphan = {
+      ...validProject,
+      tracks: [{ ...validProject.tracks[0], clips: [{ ...validProject.tracks[0].clips[0], lutIntensity: 0.5 }] }],
+    }
+    expect(() => parseProjectManifest(JSON.stringify(tooStrong))).toThrow('LUT intensity')
+    expect(() => parseProjectManifest(JSON.stringify(orphan))).toThrow('requires a LUT ID')
   })
 
   it('rejects unsupported format versions', () => {

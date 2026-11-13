@@ -1,0 +1,13 @@
+previews:
+  generation: off
+
+services:
+  - type: web
+    name: kyrocut-x1-web
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeployTrigger: off
+    healthCheckPath: /

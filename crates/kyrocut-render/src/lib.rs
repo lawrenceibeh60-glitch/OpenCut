@@ -1,12 +1,13 @@
 //! Deterministic CPU compositing primitives.
 //!
-//! Pixels are stored as straight-alpha RGBA8. Blend math currently operates
-//! directly on normalized channel values; a linear-light color pipeline is a
-//! separate, explicitly planned engine layer.
+//! Pixels are stored as straight-alpha sRGB RGBA8. Color grading has an explicit
+//! linear-light path; the legacy display-space adjustment helper remains available.
 
 use std::fmt;
 
 mod graph;
+#[cfg(target_arch = "wasm32")]
+mod wasm;
 
 pub use graph::{GraphRenderError, render_compositing_graph, render_compositing_graph_at_frame};
 
@@ -85,9 +86,8 @@ impl RgbaImage {
     }
 }
 
-/// Basic creative color controls. Values operate on normalized display RGB
-/// channels; this is an SDR working-space utility, not a color-managed grading
-/// pipeline.
+/// Basic creative color controls. The graph renderer evaluates these controls
+/// in linear-light SDR RGB and converts to/from sRGB at the RGBA8 image boundary.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ColorAdjustments {
     /// Exposure compensation in stops, supported range -8..=8.
@@ -163,6 +163,66 @@ pub fn apply_color_adjustments(
         pixel[2] = (rgb[2] * 255.0).round() as u8;
     }
     Ok(output)
+}
+
+/// Apply color adjustments in linear-light RGB while preserving the sRGB RGBA8 boundary.
+pub fn apply_color_adjustments_linear(
+    image: &RgbaImage,
+    adjustments: ColorAdjustments,
+) -> Result<RgbaImage, RenderError> {
+    if !adjustments.exposure_stops.is_finite()
+        || !(-8.0..=8.0).contains(&adjustments.exposure_stops)
+        || !adjustments.contrast.is_finite()
+        || !(-1.0..=1.0).contains(&adjustments.contrast)
+        || !adjustments.saturation.is_finite()
+        || !(0.0..=3.0).contains(&adjustments.saturation)
+        || !adjustments.gamma.is_finite()
+        || !(0.1..=4.0).contains(&adjustments.gamma)
+        || !adjustments.brightness.is_finite()
+        || !(-1.0..=1.0).contains(&adjustments.brightness)
+    {
+        return Err(RenderError::InvalidColorAdjustment);
+    }
+
+    let exposure = 2.0_f32.powf(adjustments.exposure_stops);
+    let contrast = 1.0 + adjustments.contrast;
+    let mut output = image.clone();
+    for pixel in output.pixels.as_chunks_mut::<4>().0.iter_mut() {
+        let mut linear = [
+            srgb_to_linear(pixel[0] as f32 / 255.0),
+            srgb_to_linear(pixel[1] as f32 / 255.0),
+            srgb_to_linear(pixel[2] as f32 / 255.0),
+        ];
+        for channel in &mut linear {
+            *channel = ((*channel * exposure - 0.18) * contrast + 0.18).clamp(0.0, 1.0);
+        }
+        let luminance = linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+        for channel in &mut linear {
+            let saturated = luminance + (*channel - luminance) * adjustments.saturation;
+            let brightened = (saturated + adjustments.brightness).clamp(0.0, 1.0);
+            *channel = brightened.powf(1.0 / adjustments.gamma).clamp(0.0, 1.0);
+        }
+        pixel[0] = (linear_to_srgb(linear[0]) * 255.0).round() as u8;
+        pixel[1] = (linear_to_srgb(linear[1]) * 255.0).round() as u8;
+        pixel[2] = (linear_to_srgb(linear[2]) * 255.0).round() as u8;
+    }
+    Ok(output)
+}
+
+fn srgb_to_linear(value: f32) -> f32 {
+    if value <= 0.04045 {
+        value / 12.92
+    } else {
+        ((value + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn linear_to_srgb(value: f32) -> f32 {
+    if value <= 0.003_130_8 {
+        value * 12.92
+    } else {
+        1.055 * value.powf(1.0 / 2.4) - 0.055
+    }
 }
 
 /// Return a rectangular crop without changing the source image.
@@ -647,6 +707,35 @@ mod tests {
             ),
             Err(RenderError::InvalidColorAdjustment)
         );
+    }
+
+    #[test]
+    fn linear_light_color_adjustments_preserve_neutral_values_and_alpha() {
+        let source = RgbaImage::solid(1, 1, [128, 128, 128, 77]).unwrap();
+        let neutral = apply_color_adjustments_linear(&source, ColorAdjustments::default()).unwrap();
+        assert_eq!(neutral.pixel(0, 0), Some([128, 128, 128, 77]));
+
+        let exposed = apply_color_adjustments_linear(
+            &source,
+            ColorAdjustments { exposure_stops: 1.0, ..ColorAdjustments::default() },
+        ).unwrap();
+        let pixel = exposed.pixel(0, 0).unwrap();
+        assert!((174..=178).contains(&pixel[0]));
+        assert_eq!(pixel[0], pixel[1]);
+        assert_eq!(pixel[1], pixel[2]);
+        assert_eq!(pixel[3], 77);
+    }
+
+    #[test]
+    fn linear_light_saturation_zero_produces_neutral_luminance() {
+        let source = RgbaImage::solid(1, 1, [255, 0, 0, 255]).unwrap();
+        let result = apply_color_adjustments_linear(
+            &source,
+            ColorAdjustments { saturation: 0.0, ..ColorAdjustments::default() },
+        ).unwrap();
+        let pixel = result.pixel(0, 0).unwrap();
+        assert_eq!(pixel[0], pixel[1]);
+        assert_eq!(pixel[1], pixel[2]);
     }
 
     #[test]
