@@ -118,11 +118,39 @@ const styleSpecs: Array<[string,string,Partial<ClipEffects>]> = [
   ['Dream Blue','Soft blue dreamy look',{hueRotate:200,brightness:110,contrast:88,saturation:90}],
 ]
 
+const varyEffects = (effects: Partial<ClipEffects>, factor: number): Partial<ClipEffects> => Object.fromEntries(
+  Object.entries(effects).map(([key, value]) => [
+    key,
+    ['brightness','contrast','saturation','opacity','volume'].includes(key)
+      ? 100 + ((value as number) - 100) * factor
+      : (value as number) * factor,
+  ]),
+) as Partial<ClipEffects>
+
+const varyMotion = (motion: CreativeMotion[], factor: number): CreativeMotion[] =>
+  motion.map((item) => ({ ...item, frames: Math.max(1, Math.round(item.frames * factor)) }))
+
 export const CREATIVE_PRESETS: CreativePreset[] = [
-  ...grades.map(([name,description,effects],index)=>({id:'grade-'+index,name,kind:'grade' as const,description,effects})),
-  ...transitionSpecs.map(([name,description,motion],index)=>({id:'transition-'+index,name,kind:'transition' as const,description,motion})),
-  ...motionSpecs.map(([name,description,motion],index)=>({id:'motion-'+index,name,kind:'motion' as const,description,motion})),
-  ...styleSpecs.map(([name,description,effects],index)=>({id:'style-'+index,name,kind:'style' as const,description,effects})),
+  ...grades.flatMap(([name,description,effects],index)=>[
+    {id:'grade-'+index,name,kind:'grade' as const,description,effects},
+    {id:'grade-soft-'+index,name:name+' · Soft',kind:'grade' as const,description:description+' · reduced intensity',effects:varyEffects(effects,.65)},
+    {id:'grade-bold-'+index,name:name+' · Bold',kind:'grade' as const,description:description+' · stronger intensity',effects:varyEffects(effects,1.35)},
+  ]),
+  ...transitionSpecs.flatMap(([name,description,motion],index)=>[
+    {id:'transition-'+index,name,kind:'transition' as const,description,motion},
+    {id:'transition-fast-'+index,name:name+' · Fast',kind:'transition' as const,description:description+' · faster timing',motion:varyMotion(motion,.65)},
+    {id:'transition-slow-'+index,name:name+' · Slow',kind:'transition' as const,description:description+' · slower timing',motion:varyMotion(motion,1.6)},
+  ]),
+  ...motionSpecs.flatMap(([name,description,motion],index)=>[
+    {id:'motion-'+index,name,kind:'motion' as const,description,motion},
+    {id:'motion-fast-'+index,name:name+' · Fast',kind:'motion' as const,description:description+' · faster timing',motion:varyMotion(motion,.7)},
+    {id:'motion-slow-'+index,name:name+' · Slow',kind:'motion' as const,description:description+' · slower timing',motion:varyMotion(motion,1.5)},
+  ]),
+  ...styleSpecs.flatMap(([name,description,effects],index)=>[
+    {id:'style-'+index,name,kind:'style' as const,description,effects},
+    {id:'style-soft-'+index,name:name+' · Soft',kind:'style' as const,description:description+' · softer intensity',effects:varyEffects(effects,.7)},
+    {id:'style-bold-'+index,name:name+' · Bold',kind:'style' as const,description:description+' · stronger intensity',effects:varyEffects(effects,1.3)},
+  ]),
 ]
 
 export const CREATIVE_ASSET_SOURCES = [
