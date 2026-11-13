@@ -31,7 +31,7 @@ type TimelineClip = { id: string; mediaId: string; start: number; sourceIn: numb
 type TimelineTrack = { id: string; name: string; kind: 'video' | 'audio' | 'graphics' | 'adjustment'; clips: TimelineClip[]; muted: boolean; locked: boolean }
 type TrimDrag = { clipId: string; trackId: string; edge: 'left' | 'right'; startX: number; start: number; sourceIn: number; duration: number }
 type EditorMenu = 'File' | 'Edit' | 'Composition' | 'Layer' | 'Effects' | 'Animation' | 'View' | 'Help'
-type PanelResizeDrag = { side: 'media' | 'inspector'; startX: number; startWidth: number } | { side: 'preview'; startY: number; startShare: number }
+type PanelResizeDrag = { side: 'media'; startX: number; startWidth: number } | { side: 'inspector'; startX: number; startWidth: number } | { side: 'preview'; startY: number; startShare: number }
 
 const createId = () => globalThis.crypto?.randomUUID?.() ?? `kyro-${Date.now()}-${Math.random().toString(16).slice(2)}`
 const formatTime = (seconds: number, rate: RationalFrameRate = SEQUENCE_FRAME_RATE) => {
