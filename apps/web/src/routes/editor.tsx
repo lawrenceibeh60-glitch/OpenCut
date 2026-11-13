@@ -163,8 +163,15 @@ function Editor() {
   const selectedClip = allClips.find((clip) => clip.id === selectedClipId) ?? null
   const activePlayback = useMemo(() => getActivePlaybackClips(tracks, playhead), [tracks, playhead])
   const activeVisualClips = useMemo(() => activePlayback.filter(({ track }) => track.kind === 'video' || track.kind === 'graphics'), [activePlayback])
-  const activeAudioClips = useMemo(() => activePlayback.filter(({ track }) => track.kind === 'audio'), [activePlayback])
-  const audioTimelineClips = useMemo(() => tracks.filter((track) => track.kind === 'audio').flatMap((track) => track.clips), [tracks])
+  const activeAudioClips = useMemo(() => activePlayback.filter(({ track, clip }) => {
+    const asset = assets.find((item) => item.id === clip.mediaId)
+    return (track.kind === 'audio' && asset?.kind === 'audio') || (track.kind === 'video' && asset?.kind === 'video')
+  }), [activePlayback, assets])
+  const audioTimelineClips = useMemo(() => tracks.filter((track) => track.kind === 'audio' || track.kind === 'video')
+    .flatMap((track) => track.clips.filter((clip) => {
+      const asset = assets.find((item) => item.id === clip.mediaId)
+      return asset?.kind === 'audio' || asset?.kind === 'video'
+    })), [tracks, assets])
   useEffect(() => {
     const candidate = getPrimaryPreviewClip(activePlayback)
     if (candidate && candidate.clip.id !== selectedClipId) setSelectedClipId(candidate.clip.id)
@@ -278,7 +285,7 @@ function Editor() {
       if (Math.abs(media.currentTime - sourceTime) > 0.25) {
         try { media.currentTime = sourceTime } catch { /* metadata may not be ready yet */ }
       }
-      if (media.paused) void media.play().catch(() => setPlaying(false))
+      if (media.paused) void media.play().catch(() => { /* video sources without audio tracks remain silent */ })
     }
   }, [activeAudioClips, audioTimelineClips, playhead, playing])
 
@@ -524,7 +531,7 @@ function Editor() {
     requestAnimationFrame(() => {
       const audioSources: Array<HTMLAudioElement | HTMLVideoElement> = [
         ...audioTimelineClips.map((clip) => audioElementsRef.current.get(clip.id)).filter((item): item is HTMLAudioElement => Boolean(item)),
-        ...videoElementsRef.current.values(),
+        ...[],
       ]
       const capturedAudio = new Set<string>()
       for (const source of audioSources) {
@@ -894,7 +901,7 @@ function Editor() {
                 if (!asset?.url) return <div className="kx-preview-offline" key={clip.id}><FolderOpen size={20} /> {asset?.name ?? 'MEDIA OFFLINE'} — RELINK SOURCE</div>
                 const layerIndex = activeVisualClips.findIndex((item) => item.clip.id === clip.id)
                 return asset.kind === 'video'
-                  ? <video key={clip.id} className="kx-composition-layer" ref={(element) => { if (element) videoElementsRef.current.set(clip.id, element); else videoElementsRef.current.delete(clip.id) }} src={asset.url} style={{ filter, opacity: effects.opacity / 100, transform: `translate(${effects.positionX}%, ${effects.positionY}%) scale(${effects.scaleX}, ${effects.scaleY}) rotate(${effects.rotation}deg)`, mixBlendMode: effects.blendMode === 'add' ? 'plus-lighter' : effects.blendMode, zIndex: activeVisualClips.length - layerIndex }} muted={layerIndex !== 0} playsInline preload="auto" />
+                  ? <video key={clip.id} className="kx-composition-layer" ref={(element) => { if (element) videoElementsRef.current.set(clip.id, element); else videoElementsRef.current.delete(clip.id) }} src={asset.url} style={{ filter, opacity: effects.opacity / 100, transform: `translate(${effects.positionX}%, ${effects.positionY}%) scale(${effects.scaleX}, ${effects.scaleY}) rotate(${effects.rotation}deg)`, mixBlendMode: effects.blendMode === 'add' ? 'plus-lighter' : effects.blendMode, zIndex: activeVisualClips.length - layerIndex }} muted playsInline preload="auto" />
                   : <img key={clip.id} className="kx-composition-layer" ref={(element) => { if (element) imageElementsRef.current.set(clip.id, element); else imageElementsRef.current.delete(clip.id) }} src={asset.url} alt={asset.name} style={{ filter, opacity: effects.opacity / 100, transform: `translate(${effects.positionX}%, ${effects.positionY}%) scale(${effects.scaleX}, ${effects.scaleY}) rotate(${effects.rotation}deg)`, mixBlendMode: effects.blendMode === 'add' ? 'plus-lighter' : effects.blendMode, zIndex: activeVisualClips.length - layerIndex }} />
               }) : activeAudioClips.length > 0 ? <div className="kx-audio-preview"><AudioLines size={54} /><strong>{activeAudioClips.map(({ clip }) => assets.find((asset) => asset.id === clip.mediaId)?.name ?? 'Audio').join(' + ')}</strong><span>Timeline audio mix</span></div> :
                 selectedAsset && !selectedAsset.url ? <div className="kx-preview-empty"><FolderOpen size={30} /><strong>MEDIA OFFLINE</strong><span>RELINK THE SOURCE FILE TO PREVIEW</span></div> :
@@ -902,7 +909,7 @@ function Editor() {
               <canvas ref={exportCanvasRef} className="kx-export-canvas" aria-hidden="true" />
               {audioTimelineClips.map((clip) => {
                 const asset = assets.find((item) => item.id === clip.mediaId)
-                return asset?.url && asset.kind === 'audio' ? <audio key={clip.id} ref={(element) => { if (element) audioElementsRef.current.set(clip.id, element); else audioElementsRef.current.delete(clip.id) }} src={asset.url} preload="auto" aria-hidden="true" /> : null
+                return asset?.url && (asset.kind === 'audio' || asset.kind === 'video') ? <audio key={clip.id} ref={(element) => { if (element) audioElementsRef.current.set(clip.id, element); else audioElementsRef.current.delete(clip.id) }} src={asset.url} preload="auto" aria-hidden="true" /> : null
               })}
             </div>
             <div className="kx-transport">
