@@ -450,3 +450,7 @@
 }
 .kx-watermark-tool button:disabled { opacity: .4; cursor: not-allowed; }
 .kx-watermark-tool small { color: #999; font-size: 9px; line-height: 1.45; }
+
+.kx-export-format { display: flex; align-items: center; gap: 7px; padding: 0 8px; border: 1px solid var(--kx-line, #283545); color: var(--kx-muted, #91a0af); font: 10px/1.2 inherit; letter-spacing: .08em; }
+.kx-export-format select { min-width: 112px; border: 0; outline: 0; background: transparent; color: var(--kx-text, #e8edf2); font: inherit; letter-spacing: normal; }
+.kx-export-format option { color: #111827; }
