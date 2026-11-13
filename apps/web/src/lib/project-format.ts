@@ -1,6 +1,6 @@
 import type { RationalFrameRate } from './timebase'
 
-export type ProjectMediaKind = 'video' | 'audio' | 'image'
+export type ProjectMediaKind = 'video' | 'audio' | 'image' | 'null'
 export type ProjectTrackKind = 'video' | 'audio' | 'graphics' | 'adjustment'
 
 export type ClipKeyframe = {
@@ -60,6 +60,7 @@ export type ProjectManifest = {
       enabled: boolean
       effects?: ClipEffects
       keyframes?: ClipKeyframe[]
+      parentClipId?: string
     }>
   }>
   playheadFrame: number
@@ -136,7 +137,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
     if (mediaIds.has(id)) throw new Error('Duplicate media ID: ' + id)
     mediaIds.add(id)
     const kind = value.kind
-    if (kind !== 'video' && kind !== 'audio' && kind !== 'image') {
+    if (kind !== 'video' && kind !== 'audio' && kind !== 'image' && kind !== 'null') {
       throw new Error('Unsupported media kind for ' + id)
     }
     const mediaKind = kind as ProjectMediaKind
@@ -235,6 +236,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
         enabled: clip.enabled === undefined ? true : booleanValue(clip.enabled, 'Clip enabled state'),
         ...(effects ? { effects } : {}),
         ...(keyframes?.length ? { keyframes } : {}),
+        ...(clip.parentClipId === undefined ? {} : { parentClipId: stringValue(clip.parentClipId, 'Parent null-layer ID') }),
       }
     })
     return {
@@ -246,6 +248,20 @@ export function parseProjectManifest(source: string): ProjectManifest {
       clips,
     }
   })
+
+  const clipById = new Map(tracks.flatMap((track) => track.clips.map((clip) => [clip.id, clip] as const)))
+  for (const track of tracks) for (const clip of track.clips) {
+    if (!clip.parentClipId) continue
+    if (clip.parentClipId === clip.id) throw new Error('A layer cannot parent itself')
+    let cursor = clipById.get(clip.parentClipId)
+    if (!cursor || media.find((item) => item.id === cursor!.mediaId)?.kind !== 'null') throw new Error('Parent layer must be a null layer: ' + clip.parentClipId)
+    const visited = new Set([clip.id])
+    while (cursor) {
+      if (visited.has(cursor.id)) throw new Error('Null-layer parenting cannot contain cycles')
+      visited.add(cursor.id)
+      cursor = cursor.parentClipId ? clipById.get(cursor.parentClipId) : undefined
+    }
+  }
 
   const manifest: ProjectManifest = {
     format: 'kyrocut-project',
