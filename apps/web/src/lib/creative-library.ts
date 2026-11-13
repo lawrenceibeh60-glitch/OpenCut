@@ -153,6 +153,21 @@ export const CREATIVE_PRESETS: CreativePreset[] = [
   ]),
 ]
 
+export const CREATIVE_FONTS = [
+  'Inter','Roboto','Open Sans','Lato','Montserrat','Oswald','Roboto Condensed','Roboto Mono','Playfair Display','Merriweather',
+  'Lora','Poppins','Nunito','Nunito Sans','Raleway','Ubuntu','Fira Sans','Fira Mono','Source Sans 3','Source Code Pro',
+  'Space Grotesk','Space Mono','DM Sans','DM Serif Display','DM Mono','Manrope','Sora','Outfit','Archivo','Archivo Black',
+  'Barlow','Barlow Condensed','Bebas Neue','Anton','League Spartan','Work Sans','IBM Plex Sans','IBM Plex Mono','IBM Plex Serif','PT Sans',
+  'PT Serif','PT Mono','Libre Baskerville','Cormorant Garamond','Cinzel','Bodoni Moda','Abril Fatface','Josefin Sans','Josefin Slab','Quicksand',
+  'Rubik','Karla','Cabin','Oxygen','Exo 2','Rajdhani','Chakra Petch','Orbitron','Audiowide','Teko',
+  'Black Ops One','Bungee','Bungee Shade','Press Start 2P','VT323','Share Tech Mono','Inconsolata','JetBrains Mono','Azeret Mono','Red Hat Display',
+  'Red Hat Mono','Plus Jakarta Sans','Urbanist','Albert Sans','Epilogue','Onest','Gabarito','Instrument Sans','Instrument Serif','Newsreader',
+  'Fraunces','DM Serif Text','Crimson Pro','Spectral','Bitter','Arvo','Zilla Slab','Roboto Slab','Alegreya','Alegreya Sans',
+  'Vollkorn','Yeseva One','Prata','Marcellus','Righteous','Staatliches','Satisfy','Pacifico','Dancing Script','Caveat',
+  'Great Vibes','Sacramento','Allura','Barlow Semi Condensed','Fjalla One','Kanit','Titillium Web','Mulish','Lexend','Reddit Sans',
+  'Geist','Geist Mono','Figtree','Exo','Michroma','Syncopate','Special Elite','Cormorant','Gloock','Bodoni Moda SC',
+] as const
+
 export const CREATIVE_LUT_ASSETS = [
   { name: 'Kodak 2393 Cuspclip', filename: 'kodak_2393_cuspclip.cube', category: 'Print' },
   { name: 'Fuji 3513 Constlclip', filename: 'fuji_3513_constlclip.cube', category: 'Print' },
