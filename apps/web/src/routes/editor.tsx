@@ -32,6 +32,7 @@ type TimelineTrack = { id: string; name: string; kind: 'video' | 'audio' | 'grap
 type TrimDrag = { clipId: string; trackId: string; edge: 'left' | 'right'; startX: number; start: number; sourceIn: number; duration: number }
 type EditorMenu = 'File' | 'Edit' | 'Composition' | 'Layer' | 'Effects' | 'Animation' | 'View' | 'Help'
 type PanelResizeDrag = { side: 'media'; startX: number; startWidth: number } | { side: 'inspector'; startX: number; startWidth: number } | { side: 'preview'; startY: number; startShare: number }
+type TouchClipDrag = { clipId: string; sourceTrackId: string; pointerId: number; startX: number; startTime: number }
 
 const createId = () => globalThis.crypto?.randomUUID?.() ?? `kyro-${Date.now()}-${Math.random().toString(16).slice(2)}`
 const formatTime = (seconds: number, rate: RationalFrameRate = SEQUENCE_FRAME_RATE) => {
@@ -80,6 +81,7 @@ function Editor() {
   const [previewShare, setPreviewShare] = useState(55)
   const [resizeDrag, setResizeDrag] = useState<PanelResizeDrag | null>(null)
   const [trimDrag, setTrimDrag] = useState<TrimDrag | null>(null)
+  const [touchClipDrag, setTouchClipDrag] = useState<TouchClipDrag | null>(null)
   const [projectName, setProjectName] = useState('Untitled project')
   const [projectId, setProjectId] = useState<string>(createId())
   const [projectFrameRate, setProjectFrameRate] = useState<RationalFrameRate>(SEQUENCE_FRAME_RATE)
@@ -492,6 +494,28 @@ function Editor() {
     setPlayhead(snappedStart)
     setNotice('Moved clip to ' + targetTrack.name)
   }
+
+  useEffect(() => {
+    if (!touchClipDrag) return
+    const finish = (event: PointerEvent) => {
+      if (event.pointerId !== touchClipDrag.pointerId) return
+      const target = document.elementFromPoint(event.clientX, event.clientY)
+      const row = target?.closest<HTMLElement>('[data-track-id]')
+      const targetTrackId = row?.dataset.trackId ?? touchClipDrag.sourceTrackId
+      const start = Math.max(0, touchClipDrag.startTime + (event.clientX - touchClipDrag.startX) / timelineZoom)
+      moveClipOnTimeline(touchClipDrag.clipId, targetTrackId, start)
+      setTouchClipDrag(null)
+    }
+    const cancel = (event: PointerEvent) => {
+      if (event.pointerId === touchClipDrag.pointerId) setTouchClipDrag(null)
+    }
+    window.addEventListener('pointerup', finish)
+    window.addEventListener('pointercancel', cancel)
+    return () => {
+      window.removeEventListener('pointerup', finish)
+      window.removeEventListener('pointercancel', cancel)
+    }
+  }, [touchClipDrag, timelineZoom, tracks, assets, snapEnabled, projectFrameRate]);
 
   const splitSelectedClip = () => {
     if (!selectedClip) return
@@ -1246,30 +1270,30 @@ function Editor() {
               </div>
             </div>
             {showTimelineOptions && <div className="kx-timeline-options"><label>Timeline zoom <input type="range" min="4" max="36" step="1" value={timelineZoom} onChange={(event) => setTimelineZoom(Number(event.target.value))} /><span>{timelineZoom}px / sec</span></label><label><input type="checkbox" checked={snapEnabled} onChange={(event) => setSnapEnabled(event.target.checked)} /> Snap clips to frame boundaries</label><button type="button" onClick={() => { const scroller = trackScrollRef.current; if (scroller) scroller.scrollTo({ left: Math.max(0, playhead * timelineZoom - scroller.clientWidth / 2), behavior: 'smooth' }) }}>Center playhead</button><button type="button" onClick={() => setTimelineZoom(12)}>Reset zoom</button></div>}
-            <div className="kx-ruler-row"><div className="kx-track-gutter">TRACKS</div><div className="kx-ruler">
+            <div className="kx-ruler-row"><div className="kx-track-gutter">TRACKS</div><div className="kx-ruler" onPointerDown={(event) => { if (event.button !== 0) return; const bounds = event.currentTarget.getBoundingClientRect(); setPlaying(false); setPlayhead(Math.max(0, Math.min(projectDuration, (event.clientX - bounds.left) / timelineZoom))) }}>
               {Array.from({ length: Math.ceil(projectDuration / 5) + 1 }, (_, index) => <span key={index} style={{ left: `${index * 5 * timelineZoom}px` }}>{formatTime(index * 5, projectFrameRate)}</span>)}
               <div className="kx-playhead" style={{ left: `${playhead * timelineZoom}px` }} />
             </div></div>
             <div className="kx-track-scroll" ref={trackScrollRef}>
-              {tracks.map((track) => <div className="kx-track-row" key={track.id}>
+              {tracks.map((track) => <div className="kx-track-row" key={track.id} data-track-id={track.id}>
                 <div className="kx-track-gutter"><strong>{track.name}</strong><span>{track.kind.toUpperCase()}</span>
-                  <button title={track.muted ? 'Unmute track' : 'Mute track'} onClick={() => setTracks((current) => current.map((item) => item.id === track.id ? { ...item, muted: !item.muted } : item))}><Volume2 size={12} /></button>
-                  <button title={track.locked ? 'Unlock track' : 'Lock track'} onClick={() => setTracks((current) => current.map((item) => item.id === track.id ? { ...item, locked: !item.locked } : item))}>{track.locked ? 'L' : 'U'}</button>
+                  <button aria-label={track.muted ? `Unmute ${track.name}` : `Mute ${track.name}`} aria-pressed={track.muted} title={track.muted ? 'Unmute track' : 'Mute track'} onClick={() => setTracks((current) => current.map((item) => item.id === track.id ? { ...item, muted: !item.muted } : item))}><Volume2 size={12} /></button>
+                  <button aria-label={track.locked ? `Unlock ${track.name}` : `Lock ${track.name}`} aria-pressed={track.locked} title={track.locked ? 'Unlock track' : 'Lock track'} onClick={() => setTracks((current) => current.map((item) => item.id === track.id ? { ...item, locked: !item.locked } : item))}>{track.locked ? 'L' : 'U'}</button>
                 </div>
                 <div className="kx-track-lane" style={{ width: Math.max(1200, projectDuration * timelineZoom + 240) + 'px' }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const clipId = event.dataTransfer.getData('application/x-kyrocut-clip'); if (clipId) { const bounds = event.currentTarget.getBoundingClientRect(); moveClipOnTimeline(clipId, track.id, (event.clientX - bounds.left) / timelineZoom) } }}>
                   {track.clips.map((clip) => {
                     const asset = assets.find((item) => item.id === clip.mediaId)
-                    return <button key={clip.id} draggable={!track.locked} onDragStart={(event) => { event.dataTransfer.setData('application/x-kyrocut-clip', clip.id); event.dataTransfer.effectAllowed = 'move' }} className={`kx-clip ${track.kind} ${selectedClipId === clip.id ? 'selected' : ''} ${clip.enabled ? '' : 'disabled'}`} style={{ left: `${clip.start * timelineZoom}px`, width: `${Math.max(48, clip.duration * timelineZoom)}px` }} onClick={() => { setSelectedClipId(clip.id); setPlayhead(clip.start) }} title={asset?.name ?? 'Missing media'}>
+                    return <button key={clip.id} draggable={!track.locked} onPointerDown={(event) => { if (track.locked || (event.pointerType !== 'touch' && event.pointerType !== 'pen')) return; event.preventDefault(); setTouchClipDrag({ clipId: clip.id, sourceTrackId: track.id, pointerId: event.pointerId, startX: event.clientX, startTime: clip.start }) }} onDragStart={(event) => { event.dataTransfer.setData('application/x-kyrocut-clip', clip.id); event.dataTransfer.effectAllowed = 'move' }} className={`kx-clip ${track.kind} ${selectedClipId === clip.id ? 'selected' : ''} ${clip.enabled ? '' : 'disabled'}`} style={{ left: `${clip.start * timelineZoom}px`, width: `${Math.max(48, clip.duration * timelineZoom)}px` }} onClick={() => { setSelectedClipId(clip.id); setPlayhead(clip.start) }} title={asset?.name ?? 'Missing media'}>
                       {!track.locked && <span className="kx-trim-handle left" role="presentation" onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); setTrimDrag({ clipId: clip.id, trackId: track.id, edge: 'left', startX: event.clientX, start: clip.start, sourceIn: clip.sourceIn, duration: clip.duration }) }} />}
                       <span className="kx-clip-wave">{asset?.kind === 'null' ? '◇ NULL CONTROLLER' : track.kind === 'audio' ? '▂▅▃▇▂▆▃▅▂▇▃▅' : '▥ ▥ ▥ ▥ ▥ ▥'}</span><strong>{asset?.name ?? 'Offline media'}</strong>
-                      {clip.keyframes?.map((keyframe, index) => <span key={`${keyframe.property}-${keyframe.frame}-${index}`} className="kx-keyframe-marker" style={{ left: `${framesToSeconds(keyframe.frame, projectFrameRate) * 12}px` }} title={`${keyframe.property} · frame ${keyframe.frame}`} aria-hidden="true">◆</span>)}
+                      {clip.keyframes?.map((keyframe, index) => <span key={`${keyframe.property}-${keyframe.frame}-${index}`} className="kx-keyframe-marker" style={{ left: `${framesToSeconds(keyframe.frame, projectFrameRate) * timelineZoom}px` }} title={`${keyframe.property} · frame ${keyframe.frame}`} aria-hidden="true">◆</span>)}
                       {!track.locked && <span className="kx-trim-handle right" role="presentation" onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); setTrimDrag({ clipId: clip.id, trackId: track.id, edge: 'right', startX: event.clientX, start: clip.start, sourceIn: clip.sourceIn, duration: clip.duration }) }} />}
                     </button>
                   })}
                   <div className="kx-playhead" style={{ left: `${playhead * timelineZoom}px` }} />
                 </div>
               </div>)}
-              <div className="kx-playhead-line" style={{ left: `calc(176px + ${playhead * timelineZoom}px)` }} />
+              <div className="kx-playhead-line" style={{ left: `calc(var(--kx-track-gutter, 176px) + ${playhead * timelineZoom}px)` }} />
             </div>
             <div className="kx-timeline-footer"><span>{tracks.length} TRACKS</span><span>{allClips.length} CLIPS</span><span>{assets.length} ASSETS</span><span className="kx-footer-spacer" /><span>{formatFrameRate(projectFrameRate)}</span></div>
           </div>
