@@ -59,6 +59,7 @@ function Editor() {
   const [libraryKind, setLibraryKind] = useState<'all' | CreativePresetKind>('all')
   const [backgroundRemovalBusy, setBackgroundRemovalBusy] = useState(false)
   const [backgroundRemovalProgress, setBackgroundRemovalProgress] = useState(0)
+  const [ownedWatermarkConfirmed, setOwnedWatermarkConfirmed] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const [showCompositionSettings, setShowCompositionSettings] = useState(false)
   const [trimDrag, setTrimDrag] = useState<TrimDrag | null>(null)
@@ -492,6 +493,17 @@ function Editor() {
     setSelectedClipId(null)
     setNotice('Clip removed from timeline')
   }
+  const removeOwnedWatermarkLayer = () => {
+    if (!ownedWatermarkConfirmed) { setNotice('Confirm that you own this watermark or have permission to remove it'); return }
+    if (selectedTrack?.kind !== 'graphics' || selectedAsset?.kind !== 'image') {
+      setNotice('Select a separate image/logo overlay layer on a Graphics track. Embedded third-party marks are not removed.')
+      return
+    }
+    removeSelectedClip()
+    setOwnedWatermarkConfirmed(false)
+    setNotice('Removed your selected watermark overlay layer. The source asset remains in the media bin.')
+  }
+
   const addTrack = (kind: TimelineTrack['kind']) => {
     const prefix = kind === 'audio' ? 'A' : kind === 'graphics' ? 'G' : kind === 'adjustment' ? 'ADJ' : 'V'
     const number = tracks.filter((track) => track.kind === kind).length + 1
@@ -1151,6 +1163,7 @@ function Editor() {
               <label className="kx-field"><span>Clip enabled</span><input type="checkbox" checked={selectedClip.enabled} onChange={(event) => updateSelectedClip({ enabled: event.target.checked })} /></label>
             <div className="kx-trim-actions"><button onClick={splitSelectedClip}><Scissors size={13} /> Split</button><button onClick={() => updateSelectedClip({ sourceIn: selectedClip.sourceIn + 0.5, duration: selectedClip.duration - 0.5 })}><Minus size={13} /> Trim start</button><button onClick={() => updateSelectedClip({ duration: selectedClip.duration - 0.5 })}><Minus size={13} /> Trim end</button></div>
             <button className="kx-delete-clip" onClick={removeSelectedClip}><Trash2 size={14} /> Remove clip</button>
+            {selectedTrack?.kind === 'graphics' && selectedAsset.kind === 'image' && <div className="kx-watermark-tool"><strong>OWNED WATERMARK / LOGO LAYER</strong><label><input type="checkbox" checked={ownedWatermarkConfirmed} onChange={(event) => setOwnedWatermarkConfirmed(event.target.checked)} /> I own this mark or have permission to remove it.</label><button disabled={!ownedWatermarkConfirmed} onClick={removeOwnedWatermarkLayer}>Remove selected overlay</button><small>This removes a separate overlay layer only. It does not erase marks embedded in someone else’s footage.</small></div>}
             <div className="kx-section-label">SOURCE DETAILS</div>
             <div className="kx-detail-row"><span>File size</span><strong>{(selectedAsset.size / (1024 * 1024)).toFixed(2)} MB</strong></div>
             <div className="kx-detail-row"><span>Frame rate</span><strong>{formatFrameRate(projectFrameRate)}</strong></div>
