@@ -65,6 +65,7 @@ describe('KYROCUT X1 project manifest', () => {
           keyframes: [
             { frame: 0, property: 'positionX', value: 0, interpolation: 'linear' },
             { frame: 30, property: 'positionX', value: 25, interpolation: 'hold' },
+            { frame: 0, property: 'brightness', value: 100, interpolation: 'linear' },
           ],
         }],
       }],
