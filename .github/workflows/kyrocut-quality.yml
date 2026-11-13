@@ -3,6 +3,8 @@ name: KYROCUT X1 quality
 on:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
   push:
     branches:
       - feat/kyrocut-x1-after-effects-web-workspace
