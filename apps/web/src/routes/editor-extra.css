@@ -429,3 +429,10 @@
   border: 1px solid #49443a; border-radius: 2px; font-size: 9px;
 }
 .kx-title-presets button:hover { color: #fff0ce; border-color: #c09a5a; }
+
+.kx-source-card button {
+  min-height: 26px; padding: 0 9px; color: #f0d39b;
+  background: #30291e; border: 1px solid #66502e; border-radius: 2px;
+  font-size: 9px; font-weight: 700; white-space: nowrap;
+}
+.kx-source-card button:hover { border-color: #d6ad5c; color: #fff0ce; }
