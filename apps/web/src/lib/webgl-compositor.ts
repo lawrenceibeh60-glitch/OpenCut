@@ -98,9 +98,7 @@ export class WebGLCompositor {
   private readonly positionLocation: number
   private readonly texCoordLocation: number
 
-  constructor(private readonly canvas: HTMLCanvasElement) {
-    const gl = canvas.getContext('webgl2', { alpha: false, premultipliedAlpha: true, preserveDrawingBuffer: true })
-    if (!gl) throw new Error('WebGL2 is unavailable')
+  constructor(private readonly canvas: HTMLCanvasElement, gl: WebGL2RenderingContext) {
     this.gl = gl
     const vertex = compileShader(gl, gl.VERTEX_SHADER, vertexSource)
     const fragment = compileShader(gl, gl.FRAGMENT_SHADER, fragmentSource)
@@ -226,5 +224,6 @@ export class WebGLCompositor {
 }
 
 export function createWebGLCompositor(canvas: HTMLCanvasElement): WebGLCompositor | null {
-  try { return new WebGLCompositor(canvas) } catch { return null }
+  const gl = canvas.getContext('webgl2', { alpha: false, premultipliedAlpha: true, preserveDrawingBuffer: true })
+  return gl ? new WebGLCompositor(canvas, gl) : null
 }
