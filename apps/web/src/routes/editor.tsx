@@ -7,6 +7,7 @@ import type { RationalFrameRate } from '../lib/timebase'
 import { parseProjectManifest, type ClipEffects, type ClipKeyframe, type ProjectManifest } from '../lib/project-format'
 import { evaluateClipEffects } from '../lib/clip-animation'
 import { inheritNullLayerTransform } from '../lib/null-layer'
+import { parseCubeLut, type Lut3D } from '../lib/lut'
 import { applyClipTrim } from '../lib/timeline-editing'
 import { createWebGLCompositor, type WebGLCompositor } from '../lib/webgl-compositor'
 import { getMediaBlob, saveMediaBlob } from '../lib/media-storage'
@@ -26,7 +27,7 @@ export const Route = createFileRoute('/editor')({ component: Editor })
 
 type MediaKind = 'video' | 'audio' | 'image' | 'null'
 type MediaAsset = { id: string; name: string; kind: MediaKind; url: string; size: number; duration: number; durationKnown: boolean; mimeType: string; missing?: boolean }
-type TimelineClip = { id: string; mediaId: string; start: number; sourceIn: number; duration: number; enabled: boolean; effects?: ClipEffects; keyframes?: ClipKeyframe[]; parentClipId?: string }
+type TimelineClip = { id: string; mediaId: string; start: number; sourceIn: number; duration: number; enabled: boolean; effects?: ClipEffects; keyframes?: ClipKeyframe[]; parentClipId?: string; lutId?: string; lutIntensity?: number }
 type TimelineTrack = { id: string; name: string; kind: 'video' | 'audio' | 'graphics' | 'adjustment'; clips: TimelineClip[]; muted: boolean; locked: boolean }
 type TrimDrag = { clipId: string; trackId: string; edge: 'left' | 'right'; startX: number; start: number; sourceIn: number; duration: number }
 
@@ -56,6 +57,7 @@ function Editor() {
   const [shapeColor, setShapeColor] = useState('#d6ad5c')
   const [titleFontFamily, setTitleFontFamily] = useState('Inter')
   const [librarySearch, setLibrarySearch] = useState('')
+  const [loadedLuts, setLoadedLuts] = useState<Record<string, Lut3D>>({})
   const [libraryKind, setLibraryKind] = useState<'all' | CreativePresetKind>('all')
   const [backgroundRemovalBusy, setBackgroundRemovalBusy] = useState(false)
   const [backgroundRemovalProgress, setBackgroundRemovalProgress] = useState(0)
@@ -83,6 +85,19 @@ function Editor() {
   const objectUrls = useRef<string[]>([])
   useEffect(() => () => objectUrls.current.forEach((url) => URL.revokeObjectURL(url)), [])
   useEffect(() => () => gpuCompositorRef.current?.dispose(), [])
+  useEffect(() => {
+    let active = true
+    void Promise.all(CREATIVE_LUT_ASSETS.map(async (item) => {
+      const response = await fetch('/assets/luts/' + encodeURIComponent(item.filename))
+      if (!response.ok) throw new Error('Could not load ' + item.name)
+      return [item.id, parseCubeLut(await response.text(), item.id)] as const
+    })).then((entries) => {
+      if (active) setLoadedLuts(Object.fromEntries(entries))
+    }).catch((error) => {
+      if (active) setNotice(error instanceof Error ? 'Some LUT files could not be loaded: ' + error.message : 'Some LUT files could not be loaded')
+    })
+    return () => { active = false }
+  }, [])
 
   useEffect(() => {
     const link = document.createElement('link')
@@ -160,7 +175,7 @@ function Editor() {
                 id: clip.id, mediaId: clip.mediaId,
                 start: framesToSeconds(clip.timelineStartFrame, frameRate),
                 sourceIn: framesToSeconds(clip.sourceInFrame, frameRate),
-                duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled, effects: clip.effects, keyframes: clip.keyframes, parentClipId: clip.parentClipId,
+                duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled, effects: clip.effects, keyframes: clip.keyframes, parentClipId: clip.parentClipId, lutId: clip.lutId, lutIntensity: clip.lutIntensity,
               })),
             })))
             setProjectId(manifest.id ?? createId())
@@ -274,6 +289,7 @@ function Editor() {
         ...(clip.effects ? { effects: clip.effects } : {}),
         ...(clip.keyframes?.length ? { keyframes: clip.keyframes } : {}),
         ...(clip.parentClipId ? { parentClipId: clip.parentClipId } : {}),
+        ...(clip.lutId ? { lutId: clip.lutId, lutIntensity: clip.lutIntensity ?? 1 } : {}),
       })),
     })),
     playheadFrame: secondsToFrames(playhead, projectFrameRate),
@@ -467,7 +483,7 @@ function Editor() {
     const rightClip: TimelineClip = {
       id: createId(), mediaId: selectedClip.mediaId, start: selectedClip.start + splitOffset,
       sourceIn: selectedClip.sourceIn + splitOffset, duration: selectedClip.duration - splitOffset, enabled: selectedClip.enabled,
-      effects: selectedClip.effects, keyframes: selectedClip.keyframes, parentClipId: selectedClip.parentClipId,
+      effects: selectedClip.effects, keyframes: selectedClip.keyframes, parentClipId: selectedClip.parentClipId, lutId: selectedClip.lutId, lutIntensity: selectedClip.lutIntensity,
     }
     setTracks((current) => current.map((track) => track.id === selectedClip.trackId
       ? { ...track, clips: track.clips.flatMap((clip) => clip.id === selectedClip.id
@@ -733,7 +749,7 @@ function Editor() {
             : asset?.kind === 'image' ? imageElementsRef.current.get(clip.id) : undefined
           if (!source) return []
           const effects = getClipEffects(clip)
-          return [{ id: clip.id, source, effects }]
+          return [{ id: clip.id, source, effects, lut: clip.lutId ? loadedLuts[clip.lutId] : undefined, lutStrength: clip.lutIntensity ?? 1 }]
         })
       gpuCompositorRef.current.render(canvas.width, canvas.height, layers)
       return
@@ -769,7 +785,7 @@ function Editor() {
       context.drawImage(source, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
       context.restore()
     }
-  }, [isExporting, tracks, assets, playhead, projectResolution])
+  }, [isExporting, tracks, assets, playhead, projectResolution, loadedLuts])
 
   const createShapeLayer = async (shape: 'rectangle' | 'ellipse') => {
     const geometry = shape === 'rectangle'
@@ -873,7 +889,7 @@ function Editor() {
       setAssets(restoredAssets)
       setTracks(manifest.tracks.map((track) => ({
         id: track.id, name: track.name, kind: track.kind, muted: Boolean(track.muted), locked: Boolean(track.locked),
-        clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, start: framesToSeconds(clip.timelineStartFrame, frameRate), sourceIn: framesToSeconds(clip.sourceInFrame, frameRate), duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled, effects: clip.effects, keyframes: clip.keyframes })),
+        clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, start: framesToSeconds(clip.timelineStartFrame, frameRate), sourceIn: framesToSeconds(clip.sourceInFrame, frameRate), duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled, effects: clip.effects, keyframes: clip.keyframes, parentClipId: clip.parentClipId, lutId: clip.lutId, lutIntensity: clip.lutIntensity })),
       })))
       setProjectId(manifest.id ?? createId())
       setProjectName(manifest.name || file.name.replace('.kcx1', ''))
