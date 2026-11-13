@@ -43,6 +43,7 @@ function Editor() {
   const [playing, setPlaying] = useState(false)
   const [activeTab, setActiveTab] = useState<'media' | 'effects' | 'text'>('media')
   const [titleText, setTitleText] = useState('YOUR TITLE')
+  const [shapeColor, setShapeColor] = useState('#d6ad5c')
   const [projectName, setProjectName] = useState('Untitled project')
   const [projectId, setProjectId] = useState<string>(createId())
   const [projectFrameRate, setProjectFrameRate] = useState<RationalFrameRate>(SEQUENCE_FRAME_RATE)
@@ -389,6 +390,36 @@ function Editor() {
       setNotice(error instanceof Error ? 'Could not save title layer: ' + error.message : 'Could not save title layer')
     }
   }
+  const createShapeLayer = async (shape: 'rectangle' | 'ellipse') => {
+    const geometry = shape === 'rectangle'
+      ? '<rect x="510" y="330" width="900" height="420" rx="28" fill="' + shapeColor + '" />'
+      : '<ellipse cx="960" cy="540" rx="430" ry="260" fill="' + shapeColor + '" />'
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">${geometry}</svg>`
+    const file = new File([svg], `${shape}-${Date.now()}.svg`, { type: 'image/svg+xml' })
+    const id = createId()
+    try {
+      await saveMediaBlob(id, file, file.name)
+      const url = URL.createObjectURL(file)
+      objectUrls.current.push(url)
+      const asset: MediaAsset = { id, name: file.name, kind: 'image', url, size: file.size, duration: 5, durationKnown: true, mimeType: file.type }
+      setAssets((current) => [...current, asset])
+      const existing = tracks.find((track) => track.kind === 'graphics' && !track.locked)
+      const target = existing ?? {
+        id: createId(), name: `G${tracks.filter((track) => track.kind === 'graphics').length + 1}`,
+        kind: 'graphics' as const, clips: [], muted: false, locked: false,
+      }
+      if (!existing) setTracks((current) => [...current, target])
+      const clip: TimelineClip = { id: createId(), mediaId: id, start: playhead, sourceIn: 0, duration: 5, enabled: true }
+      setTracks((current) => current.map((track) => track.id === target.id
+        ? { ...track, clips: [...track.clips, clip].sort((a, b) => a.start - b.start) }
+        : track))
+      setSelectedClipId(clip.id)
+      setActiveTab('effects')
+      setNotice(`Created ${shape} shape layer on ${target.name}`)
+    } catch (error) {
+      setNotice(error instanceof Error ? 'Could not save shape layer: ' + error.message : 'Could not save shape layer')
+    }
+  }
   const saveProject = async () => {
     try {
       const bundledMedia = new Map<string, Blob>()
@@ -611,6 +642,12 @@ function Editor() {
             <textarea id="kx-title-text" className="kx-title-input" rows={4} value={titleText} onChange={(event) => setTitleText(event.target.value)} placeholder="Type your title. Use a new line for multiple lines." />
             <button className="kx-button kx-button-primary kx-create-title" onClick={() => void createTextLayer()}><Plus size={13} /> Create title layer</button>
             <div className="kx-text-help"><strong>Vector title</strong><span>1920 × 1080 transparent SVG · 5-second clip · editable timeline position</span></div>
+            <div className="kx-section-label">SHAPE LAYERS</div>
+            <label className="kx-shape-color">FILL COLOUR <input type="color" value={shapeColor} onChange={(event) => setShapeColor(event.target.value)} /></label>
+            <div className="kx-shape-buttons">
+              <button className="kx-button" onClick={() => void createShapeLayer('rectangle')}>Rectangle</button>
+              <button className="kx-button" onClick={() => void createShapeLayer('ellipse')}>Ellipse</button>
+            </div>
           </div>}
         </aside>
 
