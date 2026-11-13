@@ -62,11 +62,16 @@ describe('KYROCUT X1 project manifest', () => {
         clips: [{
           ...validProject.tracks[0].clips[0],
           effects: { brightness: 125, contrast: 90, saturation: 140, blur: 2.5, grayscale: 0, sepia: 15, hueRotate: 210, opacity: 80, positionX: 12, positionY: -8, scaleX: 1.5, scaleY: 0.75, rotation: 45 },
+          keyframes: [
+            { frame: 0, property: 'positionX', value: 0, interpolation: 'linear' },
+            { frame: 30, property: 'positionX', value: 25, interpolation: 'hold' },
+          ],
         }],
       }],
     }
     const parsed = parseProjectManifest(JSON.stringify(withEffects))
     expect(parsed.tracks[0].clips[0].effects).toEqual(withEffects.tracks[0].clips[0].effects)
+    expect(parsed.tracks[0].clips[0].keyframes).toEqual(withEffects.tracks[0].clips[0].keyframes)
   })
 
   it('fills transform defaults when opening older projects with legacy effect fields', () => {
@@ -95,6 +100,23 @@ describe('KYROCUT X1 project manifest', () => {
       }],
     }
     expect(() => parseProjectManifest(JSON.stringify(invalid))).toThrow('Effect brightness')
+  })
+
+  it('rejects duplicate keyframes for the same property and frame', () => {
+    const invalid = {
+      ...validProject,
+      tracks: [{
+        ...validProject.tracks[0],
+        clips: [{
+          ...validProject.tracks[0].clips[0],
+          keyframes: [
+            { frame: 12, property: 'rotation', value: 10, interpolation: 'linear' },
+            { frame: 12, property: 'rotation', value: 20, interpolation: 'hold' },
+          ],
+        }],
+      }],
+    }
+    expect(() => parseProjectManifest(JSON.stringify(invalid))).toThrow('Duplicate keyframe')
   })
 
   it('rejects unsupported format versions', () => {
