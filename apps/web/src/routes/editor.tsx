@@ -29,7 +29,7 @@ const formatTime = (seconds: number, rate: RationalFrameRate = SEQUENCE_FRAME_RA
 }
 const mediaKind = (file: File): MediaKind | null => file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('image/') ? 'image' : null
 const formatFrameRate = (rate: RationalFrameRate) => `${Number((rate.numerator / rate.denominator).toFixed(3))} FPS`
-const DEFAULT_CLIP_EFFECTS: ClipEffects = { brightness: 100, contrast: 100, saturation: 100, blur: 0, grayscale: 0, sepia: 0, hueRotate: 0, opacity: 100 }
+const DEFAULT_CLIP_EFFECTS: ClipEffects = { brightness: 100, contrast: 100, saturation: 100, blur: 0, grayscale: 0, sepia: 0, hueRotate: 0, opacity: 100, positionX: 0, positionY: 0, scaleX: 1, scaleY: 1, rotation: 0 }
 
 function Editor() {
   const [assets, setAssets] = useState<MediaAsset[]>([])
@@ -496,7 +496,10 @@ function Editor() {
       context.save()
       context.globalAlpha = effects.opacity / 100
       context.filter = `brightness(${effects.brightness}%) contrast(${effects.contrast}%) saturate(${effects.saturation}%) blur(${effects.blur}px) grayscale(${effects.grayscale}%) sepia(${effects.sepia}%) hue-rotate(${effects.hueRotate}deg)`
-      context.drawImage(source, (canvas.width - drawWidth) / 2, (canvas.height - drawHeight) / 2, drawWidth, drawHeight)
+      context.translate(canvas.width / 2 + canvas.width * effects.positionX / 100, canvas.height / 2 + canvas.height * effects.positionY / 100)
+      context.rotate(effects.rotation * Math.PI / 180)
+      context.scale(effects.scaleX, effects.scaleY)
+      context.drawImage(source, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
       context.restore()
     }
   }, [isExporting, tracks, assets, playhead, projectResolution])
@@ -744,6 +747,12 @@ function Editor() {
               <label className="kx-field"><span>Sepia · {selectedEffects.sepia}%</span><input type="range" min="0" max="100" value={selectedEffects.sepia} onChange={(event) => updateEffect({ sepia: Number(event.target.value) })} /></label>
               <label className="kx-field"><span>Hue rotation · {selectedEffects.hueRotate}°</span><input type="range" min="0" max="360" value={selectedEffects.hueRotate} onChange={(event) => updateEffect({ hueRotate: Number(event.target.value) })} /></label>
               <label className="kx-field"><span>Opacity · {selectedEffects.opacity}%</span><input type="range" min="0" max="100" value={selectedEffects.opacity} onChange={(event) => updateEffect({ opacity: Number(event.target.value) })} /></label>
+              <div className="kx-section-label">TRANSFORM</div>
+              <label className="kx-field"><span>Position X · {selectedEffects.positionX}%</span><input type="range" min="-100" max="100" value={selectedEffects.positionX} onChange={(event) => updateEffect({ positionX: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Position Y · {selectedEffects.positionY}%</span><input type="range" min="-100" max="100" value={selectedEffects.positionY} onChange={(event) => updateEffect({ positionY: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Scale X · {selectedEffects.scaleX.toFixed(2)}×</span><input type="range" min="0.1" max="5" step="0.01" value={selectedEffects.scaleX} onChange={(event) => updateEffect({ scaleX: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Scale Y · {selectedEffects.scaleY.toFixed(2)}×</span><input type="range" min="0.1" max="5" step="0.01" value={selectedEffects.scaleY} onChange={(event) => updateEffect({ scaleY: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Rotation · {selectedEffects.rotation}°</span><input type="range" min="-180" max="180" value={selectedEffects.rotation} onChange={(event) => updateEffect({ rotation: Number(event.target.value) })} /></label>
               <button onClick={() => updateSelectedClip({ effects: { ...DEFAULT_CLIP_EFFECTS } })}>Reset effects</button>
             </> : <div className="kx-empty-small"><WandSparkles size={22} /><span>Select a video or image clip to edit its live effects.</span></div>}
           </div>}
@@ -773,8 +782,8 @@ function Editor() {
                 if (!asset?.url) return <div className="kx-preview-offline" key={clip.id}><FolderOpen size={20} /> {asset?.name ?? 'MEDIA OFFLINE'} — RELINK SOURCE</div>
                 const layerIndex = activeVisualClips.findIndex((item) => item.clip.id === clip.id)
                 return asset.kind === 'video'
-                  ? <video key={clip.id} className="kx-composition-layer" ref={(element) => { if (element) videoElementsRef.current.set(clip.id, element); else videoElementsRef.current.delete(clip.id) }} src={asset.url} style={{ filter, opacity: effects.opacity / 100, zIndex: activeVisualClips.length - layerIndex }} muted={layerIndex !== 0} playsInline preload="auto" />
-                  : <img key={clip.id} className="kx-composition-layer" ref={(element) => { if (element) imageElementsRef.current.set(clip.id, element); else imageElementsRef.current.delete(clip.id) }} src={asset.url} alt={asset.name} style={{ filter, opacity: effects.opacity / 100, zIndex: activeVisualClips.length - layerIndex }} />
+                  ? <video key={clip.id} className="kx-composition-layer" ref={(element) => { if (element) videoElementsRef.current.set(clip.id, element); else videoElementsRef.current.delete(clip.id) }} src={asset.url} style={{ filter, opacity: effects.opacity / 100, transform: `translate(${effects.positionX}%, ${effects.positionY}%) scale(${effects.scaleX}, ${effects.scaleY}) rotate(${effects.rotation}deg)`, zIndex: activeVisualClips.length - layerIndex }} muted={layerIndex !== 0} playsInline preload="auto" />
+                  : <img key={clip.id} className="kx-composition-layer" ref={(element) => { if (element) imageElementsRef.current.set(clip.id, element); else imageElementsRef.current.delete(clip.id) }} src={asset.url} alt={asset.name} style={{ filter, opacity: effects.opacity / 100, transform: `translate(${effects.positionX}%, ${effects.positionY}%) scale(${effects.scaleX}, ${effects.scaleY}) rotate(${effects.rotation}deg)`, zIndex: activeVisualClips.length - layerIndex }} />
               }) : activeAudioClips.length > 0 ? <div className="kx-audio-preview"><AudioLines size={54} /><strong>{activeAudioClips.map(({ clip }) => assets.find((asset) => asset.id === clip.mediaId)?.name ?? 'Audio').join(' + ')}</strong><span>Timeline audio mix</span></div> :
                 selectedAsset && !selectedAsset.url ? <div className="kx-preview-empty"><FolderOpen size={30} /><strong>MEDIA OFFLINE</strong><span>RELINK THE SOURCE FILE TO PREVIEW</span></div> :
                 <div className="kx-preview-empty"><div className="kx-preview-logo"><Clapperboard size={32} /></div><strong>KYROCUT X1</strong><span>CREATIVE VIEWPORT</span><small>Move the playhead over a layer to preview the composition</small></div>}
