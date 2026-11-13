@@ -310,3 +310,10 @@
 }
 .kx-shape-buttons { display: flex; gap: 6px; }
 .kx-shape-buttons button { flex: 1; }
+
+
+.kx-export-canvas {
+  position: absolute; left: -10000px; top: 0;
+  width: 1px; height: 1px; opacity: 0; pointer-events: none;
+}
+.kx-top-actions button:disabled { opacity: .55; cursor: wait; }
