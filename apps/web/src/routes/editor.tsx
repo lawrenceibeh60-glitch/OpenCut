@@ -71,7 +71,8 @@ function Editor() {
   useEffect(() => {
     if (!trimDrag) return
     const move = (event: PointerEvent) => {
-      const requested = framesToSeconds(secondsToFrames((event.clientX - trimDrag.startX) / 12, projectFrameRate), projectFrameRate)
+      const deltaFrames = Math.round((event.clientX - trimDrag.startX) / 12 * projectFrameRate.numerator / projectFrameRate.denominator)
+      const requested = deltaFrames * projectFrameRate.denominator / projectFrameRate.numerator
       const track = tracks.find((item) => item.id === trimDrag.trackId)
       const clip = track?.clips.find((item) => item.id === trimDrag.clipId)
       if (!track || !clip || track.locked) return
