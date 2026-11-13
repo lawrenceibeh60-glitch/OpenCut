@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { removeBackground } from '@bg0/browser'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import { framesToSeconds, secondsToFrames, SEQUENCE_FRAME_RATE } from '../lib/timebase'
@@ -11,6 +12,8 @@ import { createWebGLCompositor, type WebGLCompositor } from '../lib/webgl-compos
 import { getMediaBlob, saveMediaBlob } from '../lib/media-storage'
 import { clampTimelineTime, getActivePlaybackClips, getPrimaryPreviewClip } from '../lib/timeline-playback'
 import { decodeProjectArchive, encodeProjectArchive, isProjectArchive } from '../lib/project-archive'
+import { CREATIVE_ASSET_SOURCES, CREATIVE_PRESETS } from '../lib/creative-library'
+import type { CreativePreset, CreativePresetKind } from '../lib/creative-library'
 import {
   AudioLines, ChevronDown, Clapperboard, Film, FolderOpen, ImagePlus, Layers3,
   Minus, Music2, Pause, Play, Plus, Save, Scissors, Settings2, Sparkles, StepBack, StepForward, Trash2,
@@ -46,11 +49,16 @@ function Editor() {
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null)
   const [playhead, setPlayhead] = useState(0)
   const [playing, setPlaying] = useState(false)
-  const [activeTab, setActiveTab] = useState<'media' | 'effects' | 'text'>('media')
+  const [activeTab, setActiveTab] = useState<'media' | 'effects' | 'text' | 'library'>('media')
   const [titleText, setTitleText] = useState('YOUR TITLE')
   const [titleColor, setTitleColor] = useState('#ffffff')
   const [titleFontSize, setTitleFontSize] = useState(88)
   const [shapeColor, setShapeColor] = useState('#d6ad5c')
+  const [titleFontFamily, setTitleFontFamily] = useState('Inter')
+  const [librarySearch, setLibrarySearch] = useState('')
+  const [libraryKind, setLibraryKind] = useState<'all' | CreativePresetKind>('all')
+  const [backgroundRemovalBusy, setBackgroundRemovalBusy] = useState(false)
+  const [backgroundRemovalProgress, setBackgroundRemovalProgress] = useState(0)
   const [isExporting, setIsExporting] = useState(false)
   const [showCompositionSettings, setShowCompositionSettings] = useState(false)
   const [trimDrag, setTrimDrag] = useState<TrimDrag | null>(null)
@@ -186,6 +194,7 @@ function Editor() {
   const projectDuration = Math.max(30, ...allClips.filter((clip) => clip.enabled).map((clip) => clip.start + clip.duration))
   const selectedTrack = tracks.find((track) => track.clips.some((clip) => clip.id === selectedClipId))
   const missingAssets = assets.filter((asset) => asset.kind !== 'null' && !asset.url)
+  const filteredCreativePresets = CREATIVE_PRESETS.filter((preset) => (libraryKind === 'all' || preset.kind === libraryKind) && `${preset.name} ${preset.description}`.toLowerCase().includes(librarySearch.toLowerCase()))
   const selectedBaseEffects = selectedClip?.effects ?? DEFAULT_CLIP_EFFECTS
   const selectedFrame = selectedClip ? secondsToFrames(Math.max(0, playhead - selectedClip.start), projectFrameRate) : 0
   const getClipEffects = (clip: TimelineClip) => {
@@ -483,6 +492,61 @@ function Editor() {
     setNotice(`Created ${asset.name}. Parent visual layers to it in the Inspector.`)
   }
 
+  const applyCreativePreset = (preset: CreativePreset) => {
+    if (!selectedClip) { setNotice('Select a timeline clip before applying a preset'); return }
+    const currentEffects = selectedClip.effects ?? DEFAULT_CLIP_EFFECTS
+    const nextEffects = preset.effects ? { ...currentEffects, ...preset.effects } : currentEffects
+    const durationFrames = Math.max(1, secondsToFrames(selectedClip.duration, projectFrameRate))
+    const generated: ClipKeyframe[] = (preset.motion ?? []).flatMap((motion) => {
+      const span = Math.min(motion.frames, Math.max(0, durationFrames - 1))
+      if (span <= 0) return []
+      const firstFrame = motion.edge === 'in' ? 0 : durationFrames - span
+      const lastFrame = motion.edge === 'in' ? span : durationFrames - 1
+      return [
+        { frame: firstFrame, property: motion.property, value: motion.from, interpolation: 'linear' as const },
+        { frame: lastFrame, property: motion.property, value: motion.to, interpolation: 'linear' as const },
+      ]
+    })
+    const merged = new Map<string, ClipKeyframe>()
+    for (const keyframe of [...(selectedClip.keyframes ?? []), ...generated]) merged.set(`${keyframe.property}:${keyframe.frame}`, keyframe)
+    updateSelectedClip({ effects: nextEffects, keyframes: [...merged.values()].sort((a, b) => a.frame - b.frame) })
+    setNotice(`Applied ${preset.name} to ${selectedAsset?.name ?? 'selected layer'}`)
+  }
+
+  const removeSelectedBackground = async () => {
+    if (!selectedClip || selectedAsset?.kind !== 'image' || !selectedAsset.url || backgroundRemovalBusy) return
+    setBackgroundRemovalBusy(true)
+    setBackgroundRemovalProgress(0)
+    try {
+      const stored = await getMediaBlob(selectedAsset.id).catch(() => null)
+      const original = stored ?? await fetch(selectedAsset.url).then((response) => {
+        if (!response.ok) throw new Error('Could not read the selected image source')
+        return response.blob()
+      })
+      const input = new File([original], selectedAsset.name, { type: original.type || selectedAsset.mimeType || 'image/png' })
+      const result = await removeBackground(input, {
+        quality: 'quality',
+        onProgress: ({ progress, message }) => {
+          setBackgroundRemovalProgress(Math.round(progress * 100))
+          setNotice(message || `Removing background · ${Math.round(progress * 100)}%`)
+        },
+      })
+      const outputId = createId()
+      const outputName = `${selectedAsset.name.replace(/\\.[^.]+$/, '')}-background-removed.png`
+      await saveMediaBlob(outputId, result.blob, outputName)
+      const url = URL.createObjectURL(result.blob)
+      objectUrls.current.push(url)
+      setAssets((current) => [...current, { id: outputId, name: outputName, kind: 'image', url, size: result.blob.size, duration: selectedAsset.duration, durationKnown: true, mimeType: 'image/png' }])
+      setTracks((current) => current.map((track) => ({ ...track, clips: track.clips.map((clip) => clip.id === selectedClip.id ? { ...clip, mediaId: outputId } : clip) })))
+      setNotice('Background removed locally. The original remains in the media bin.')
+    } catch (error) {
+      setNotice(error instanceof Error ? `Background removal failed: ${error.message}` : 'Background removal failed')
+    } finally {
+      setBackgroundRemovalBusy(false)
+      setBackgroundRemovalProgress(0)
+    }
+  }
+
   const createTextLayer = async () => {
     const text = titleText.trim()
     if (!text) { setNotice('Enter some text before creating a title layer'); return }
@@ -491,7 +555,8 @@ function Editor() {
     const lineHeight = 96
     const firstY = 540 - ((lines.length - 1) * lineHeight) / 2
     const tspans = lines.map((line, index) => `<tspan x="960" y="${firstY + index * lineHeight}">${line || ' '}</tspan>`).join('')
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"><text text-anchor="middle" dominant-baseline="middle" font-family="Arial, Helvetica, sans-serif" font-size="${titleFontSize}" font-weight="700" letter-spacing="1" fill="${titleColor}" stroke="#111111" stroke-width="3" paint-order="stroke">${tspans}</text></svg>`
+    const safeFont = titleFontFamily.replace(/["&<>]/g, '')
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"><text text-anchor="middle" dominant-baseline="middle" font-family="${safeFont}, Arial, Helvetica, sans-serif" font-size="${titleFontSize}" font-weight="700" letter-spacing="1" fill="${titleColor}" stroke="#111111" stroke-width="3" paint-order="stroke">${tspans}</text></svg>`
     const file = new File([svg], `Title-${Date.now()}.svg`, { type: 'image/svg+xml' })
     const id = createId()
     try {
@@ -898,6 +963,7 @@ function Editor() {
               <button className={activeTab === 'media' ? 'active' : ''} onClick={() => setActiveTab('media')}><FolderOpen size={14} /> Media</button>
               <button className={activeTab === 'effects' ? 'active' : ''} onClick={() => setActiveTab('effects')}><WandSparkles size={14} /> Effects</button>
               <button className={activeTab === 'text' ? 'active' : ''} onClick={() => setActiveTab('text')}><Layers3 size={14} /> Text</button>
+              <button className={activeTab === 'library' ? 'active' : ''} onClick={() => setActiveTab('library')}><Sparkles size={14} /> Library</button>
             </div>
             <button className="kx-icon-button" title="Import media" onClick={() => fileInput.current?.click()}><Plus size={17} /></button>
             <input ref={fileInput} hidden multiple type="file" accept="video/*,audio/*,image/*" onChange={(event) => { if (event.target.files) void addFiles(event.target.files); event.target.value = '' }} />
@@ -917,7 +983,11 @@ function Editor() {
             </div>}
           </div>}
           {activeTab === 'effects' && <div className="kx-inspector-content">
+            <div className="kx-library-head"><div className="kx-section-label">CREATIVE PRESETS <span>{CREATIVE_PRESETS.length}</span></div><input aria-label="Search creative presets" value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)} placeholder="Search presets…" /><select aria-label="Preset category" value={libraryKind} onChange={(event) => setLibraryKind(event.target.value as 'all' | CreativePresetKind)}><option value="all">All categories</option><option value="grade">Color grades</option><option value="transition">Transitions</option><option value="motion">Text / motion</option><option value="style">Visual styles</option></select></div>
+            <div className="kx-preset-grid">{filteredCreativePresets.slice(0, 48).map((preset) => <article className="kx-preset-card" key={preset.id}><div className={`kx-preset-swatch ${preset.kind}`} /><div className="kx-preset-copy"><strong>{preset.name}</strong><small>{preset.description}</small></div><button disabled={!selectedClip} onClick={() => applyCreativePreset(preset)}>Apply</button></article>)}</div>
+            {filteredCreativePresets.length > 48 && <p className="kx-effect-note">Showing 48 of {filteredCreativePresets.length} matches. Refine your search to find a preset.</p>}
             {selectedClip ? <>
+              {selectedAsset?.kind === 'image' && <div className="kx-bg-remove-card"><div><strong>AI Background Removal</strong><small>Local processing · source image stays private</small></div><button disabled={backgroundRemovalBusy} onClick={() => void removeSelectedBackground()}>{backgroundRemovalBusy ? `Processing ${backgroundRemovalProgress}%` : 'Remove background'}</button></div>}
               <div className="kx-section-label">LIVE CLIP EFFECTS</div>
               <p className="kx-effect-note">These non-destructive adjustments are applied to the selected video or image preview and saved with the project.</p>
               <label className="kx-field"><span>Brightness · {selectedEffects.brightness}% <button type="button" className="kx-keyframe-button" title="Add or update brightness keyframe" onClick={() => addKeyframe('brightness')}>{selectedClip.keyframes?.some((keyframe) => keyframe.frame === selectedFrame && keyframe.property === 'brightness') ? '◆' : '◇'}</button></span><input type="range" min="0" max="200" value={selectedEffects.brightness} onChange={(event) => updateEffect({ brightness: Number(event.target.value) })} /></label>
@@ -939,8 +1009,11 @@ function Editor() {
               <button onClick={() => updateSelectedClip({ effects: { ...DEFAULT_CLIP_EFFECTS } })}>Reset effects</button>
             </> : <div className="kx-empty-small"><WandSparkles size={22} /><span>Select a video or image clip to edit its live effects.</span></div>}
           </div>}
+          {activeTab === 'library' && <div className="kx-text-tools"><div className="kx-section-label">DOWNLOADABLE CREATIVE ASSET SOURCES</div><p className="kx-effect-note">Curated source libraries. Open a source to download its packs; check the license on each asset before use.</p>{CREATIVE_ASSET_SOURCES.map((source) => <a className="kx-source-card" href={source.url} target="_blank" rel="noreferrer" key={source.id}><span><strong>{source.name}</strong><small>{source.category} · {source.license}</small><small>{source.details}</small></span><b>OPEN ↗</b></a>)}<div className="kx-section-label">FONT COLLECTION</div><p className="kx-effect-note">Twenty curated families are available in the title builder. The Google Fonts family files load on demand.</p></div>}
           {activeTab === 'text' && <div className="kx-text-tools">
             <div className="kx-section-label">CREATE GRAPHICS</div>
+            <label className="kx-field"><span>Font family</span><select value={titleFontFamily} onChange={(event) => setTitleFontFamily(event.target.value)}>{['Inter','Montserrat','Oswald','Roboto Mono','Playfair Display','Bebas Neue','Space Grotesk','Archivo Black','DM Sans','Manrope','Poppins','Anton','Merriweather','Raleway','Outfit','Sora','Lora','Barlow Condensed','Cinzel','IBM Plex Sans'].map((font) => <option key={font} value={font}>{font}</option>)}</select></label>
+            <div className="kx-section-label">TITLE STYLES</div><div className="kx-title-presets">{[{name:'Cinematic',font:'Oswald',color:'#f4e7cf',size:104},{name:'Editorial',font:'Playfair Display',color:'#e7d5b2',size:96},{name:'Tech',font:'Roboto Mono',color:'#72d9ef',size:76},{name:'Minimal',font:'Inter',color:'#ffffff',size:82},{name:'Impact',font:'Anton',color:'#f5f0e6',size:128},{name:'Neon',font:'Montserrat',color:'#ff9cf5',size:88},{name:'Retro',font:'Bebas Neue',color:'#ffc36a',size:116},{name:'Luxury',font:'Cinzel',color:'#e7d0a2',size:92}].map((preset) => <button key={preset.name} onClick={() => { setTitleFontFamily(preset.font); setTitleColor(preset.color); setTitleFontSize(preset.size) }}>{preset.name}</button>)}</div>
             <label className="kx-text-label" htmlFor="kx-title-text">TITLE CONTENT</label>
             <textarea id="kx-title-text" className="kx-title-input" rows={4} value={titleText} onChange={(event) => setTitleText(event.target.value)} placeholder="Type your title. Use a new line for multiple lines." />
             <label className="kx-shape-color">TEXT COLOUR <input type="color" value={titleColor} onChange={(event) => setTitleColor(event.target.value)} /></label>
