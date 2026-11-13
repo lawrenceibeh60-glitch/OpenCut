@@ -42,6 +42,7 @@ function Editor() {
   const [playhead, setPlayhead] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [activeTab, setActiveTab] = useState<'media' | 'effects' | 'text'>('media')
+  const [titleText, setTitleText] = useState('YOUR TITLE')
   const [projectName, setProjectName] = useState('Untitled project')
   const [projectId, setProjectId] = useState<string>(createId())
   const [projectFrameRate, setProjectFrameRate] = useState<RationalFrameRate>(SEQUENCE_FRAME_RATE)
@@ -323,6 +324,41 @@ function Editor() {
     const number = tracks.filter((track) => track.kind === kind).length + 1
     setTracks((current) => [...current, { id: createId(), name: `${prefix}${number}`, kind, clips: [], muted: false, locked: false }])
   }
+
+  const createTextLayer = async () => {
+    const text = titleText.trim()
+    if (!text) { setNotice('Enter some text before creating a title layer'); return }
+    const xmlSafe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
+    const lines = xmlSafe.split(/\\r?\\n/)
+    const lineHeight = 96
+    const firstY = 540 - ((lines.length - 1) * lineHeight) / 2
+    const tspans = lines.map((line, index) => `<tspan x="960" y="${firstY + index * lineHeight}">${line || ' '}</tspan>`).join('')
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"><text text-anchor="middle" dominant-baseline="middle" font-family="Arial, Helvetica, sans-serif" font-size="88" font-weight="700" letter-spacing="1" fill="#ffffff" stroke="#111111" stroke-width="3" paint-order="stroke">${tspans}</text></svg>`
+    const file = new File([svg], `Title-${Date.now()}.svg`, { type: 'image/svg+xml' })
+    const id = createId()
+    try {
+      await saveMediaBlob(id, file, file.name)
+      const url = URL.createObjectURL(file)
+      objectUrls.current.push(url)
+      const asset: MediaAsset = { id, name: file.name, kind: 'image', url, size: file.size, duration: 5, durationKnown: true, mimeType: file.type }
+      setAssets((current) => [...current, asset])
+      const existing = tracks.find((track) => track.kind === 'graphics' && !track.locked)
+      const target = existing ?? {
+        id: createId(), name: `G${tracks.filter((track) => track.kind === 'graphics').length + 1}`,
+        kind: 'graphics' as const, clips: [], muted: false, locked: false,
+      }
+      if (!existing) setTracks((current) => [...current, target])
+      const clip: TimelineClip = { id: createId(), mediaId: id, start: playhead, sourceIn: 0, duration: 5, enabled: true }
+      setTracks((current) => current.map((track) => track.id === target.id
+        ? { ...track, clips: [...track.clips, clip].sort((a, b) => a.start - b.start) }
+        : track))
+      setSelectedClipId(clip.id)
+      setActiveTab('effects')
+      setNotice('Created a vector title layer on ' + target.name)
+    } catch (error) {
+      setNotice(error instanceof Error ? 'Could not save title layer: ' + error.message : 'Could not save title layer')
+    }
+  }
   const saveProject = async () => {
     try {
       const bundledMedia = new Map<string, Blob>()
@@ -539,7 +575,13 @@ function Editor() {
               <button onClick={() => updateSelectedClip({ effects: { ...DEFAULT_CLIP_EFFECTS } })}>Reset effects</button>
             </> : <div className="kx-empty-small"><WandSparkles size={22} /><span>Select a video or image clip to edit its live effects.</span></div>}
           </div>}
-          {activeTab === 'text' && <div className="kx-placeholder-list"><strong>Graphics and titles</strong><p>Text and shape layers will use the same timeline and keyframe model as media clips.</p></div>}
+          {activeTab === 'text' && <div className="kx-text-tools">
+            <div className="kx-section-label">CREATE GRAPHICS</div>
+            <label className="kx-text-label" htmlFor="kx-title-text">TITLE CONTENT</label>
+            <textarea id="kx-title-text" className="kx-title-input" rows={4} value={titleText} onChange={(event) => setTitleText(event.target.value)} placeholder="Type your title. Use a new line for multiple lines." />
+            <button className="kx-button kx-button-primary kx-create-title" onClick={() => void createTextLayer()}><Plus size={13} /> Create title layer</button>
+            <div className="kx-text-help"><strong>Vector title</strong><span>1920 × 1080 transparent SVG · 5-second clip · editable timeline position</span></div>
+          </div>}
         </aside>
 
         <section className="kx-center-column">
