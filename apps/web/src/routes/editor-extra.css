@@ -336,3 +336,13 @@
   text-shadow: 0 1px 3px #000;
   pointer-events: none;
 }
+
+
+.kx-trim-handle {
+  position: absolute; top: 0; bottom: 0; z-index: 8;
+  width: 6px; background: #f0c36d; opacity: 0;
+  cursor: ew-resize; touch-action: none;
+}
+.kx-trim-handle.left { left: 0; border-right: 1px solid #171717; }
+.kx-trim-handle.right { right: 0; border-left: 1px solid #171717; }
+.kx-clip:hover .kx-trim-handle, .kx-clip.selected .kx-trim-handle { opacity: .9; }
