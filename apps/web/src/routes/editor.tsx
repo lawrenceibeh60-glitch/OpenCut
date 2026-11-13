@@ -44,6 +44,8 @@ function Editor() {
   const [playing, setPlaying] = useState(false)
   const [activeTab, setActiveTab] = useState<'media' | 'effects' | 'text'>('media')
   const [titleText, setTitleText] = useState('YOUR TITLE')
+  const [titleColor, setTitleColor] = useState('#ffffff')
+  const [titleFontSize, setTitleFontSize] = useState(88)
   const [shapeColor, setShapeColor] = useState('#d6ad5c')
   const [isExporting, setIsExporting] = useState(false)
   const [projectName, setProjectName] = useState('Untitled project')
@@ -405,7 +407,7 @@ function Editor() {
     const lineHeight = 96
     const firstY = 540 - ((lines.length - 1) * lineHeight) / 2
     const tspans = lines.map((line, index) => `<tspan x="960" y="${firstY + index * lineHeight}">${line || ' '}</tspan>`).join('')
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"><text text-anchor="middle" dominant-baseline="middle" font-family="Arial, Helvetica, sans-serif" font-size="88" font-weight="700" letter-spacing="1" fill="#ffffff" stroke="#111111" stroke-width="3" paint-order="stroke">${tspans}</text></svg>`
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"><text text-anchor="middle" dominant-baseline="middle" font-family="Arial, Helvetica, sans-serif" font-size="${titleFontSize}" font-weight="700" letter-spacing="1" fill="${titleColor}" stroke="#111111" stroke-width="3" paint-order="stroke">${tspans}</text></svg>`
     const file = new File([svg], `Title-${Date.now()}.svg`, { type: 'image/svg+xml' })
     const id = createId()
     try {
@@ -806,6 +808,8 @@ function Editor() {
             <div className="kx-section-label">CREATE GRAPHICS</div>
             <label className="kx-text-label" htmlFor="kx-title-text">TITLE CONTENT</label>
             <textarea id="kx-title-text" className="kx-title-input" rows={4} value={titleText} onChange={(event) => setTitleText(event.target.value)} placeholder="Type your title. Use a new line for multiple lines." />
+            <label className="kx-shape-color">TEXT COLOUR <input type="color" value={titleColor} onChange={(event) => setTitleColor(event.target.value)} /></label>
+            <label className="kx-field"><span>Font size · {titleFontSize}px</span><input type="range" min="24" max="180" step="2" value={titleFontSize} onChange={(event) => setTitleFontSize(Number(event.target.value))} /></label>
             <button className="kx-button kx-button-primary kx-create-title" onClick={() => void createTextLayer()}><Plus size={13} /> Create title layer</button>
             <div className="kx-text-help"><strong>Vector title</strong><span>1920 × 1080 transparent SVG · 5-second clip · editable timeline position</span></div>
             <div className="kx-section-label">SHAPE LAYERS</div>
