@@ -5,12 +5,13 @@ export type ProjectTrackKind = 'video' | 'audio' | 'graphics' | 'adjustment'
 
 export type ClipKeyframe = {
   frame: number
-  property: 'opacity' | 'positionX' | 'positionY' | 'scaleX' | 'scaleY' | 'rotation'
+  property: 'opacity' | 'volume' | 'positionX' | 'positionY' | 'scaleX' | 'scaleY' | 'rotation'
   value: number
   interpolation: 'linear' | 'hold'
 }
 
 export type ClipEffects = {
+  volume: number
   blendMode: 'normal' | 'multiply' | 'screen' | 'add'
   brightness: number
   contrast: number
@@ -188,6 +189,7 @@ export function parseProjectManifest(source: string): ProjectManifest {
         sepia: boundedNumber(effectsValue.sepia, 'Effect sepia', 0, 100, 0),
         hueRotate: boundedNumber(effectsValue.hueRotate, 'Effect hue rotation', 0, 360, 0),
         opacity: boundedNumber(effectsValue.opacity, 'Effect opacity', 0, 100, 100),
+        volume: boundedNumber(effectsValue.volume, 'Effect volume', 0, 200, 100),
         positionX: boundedNumber(effectsValue.positionX, 'Effect position X', -100, 100, 0),
         positionY: boundedNumber(effectsValue.positionY, 'Effect position Y', -100, 100, 0),
         scaleX: boundedNumber(effectsValue.scaleX, 'Effect scale X', 0.1, 5, 1),
@@ -204,12 +206,12 @@ export function parseProjectManifest(source: string): ProjectManifest {
           const keyframe = record(keyframeValue, 'Keyframe ' + keyframeIndex)
           const frame = integerValue(keyframe.frame, 'Keyframe frame')
           const property = keyframe.property
-          if (property !== 'opacity' && property !== 'positionX' && property !== 'positionY' &&
+          if (property !== 'opacity' && property !== 'volume' && property !== 'positionX' && property !== 'positionY' &&
               property !== 'scaleX' && property !== 'scaleY' && property !== 'rotation') {
             throw new Error('Unsupported keyframe property')
           }
           const bounds: Record<ClipKeyframe['property'], [number, number]> = {
-            opacity: [0, 100], positionX: [-100, 100], positionY: [-100, 100],
+            opacity: [0, 100], volume: [0, 200], positionX: [-100, 100], positionY: [-100, 100],
             scaleX: [0.1, 5], scaleY: [0.1, 5], rotation: [-180, 180],
           }
           if (typeof keyframe.value !== 'number') throw new Error('Keyframe value must be a number')
