@@ -68,6 +68,19 @@ uniform bool uUseLut;
 in vec2 vTexCoord;
 out vec4 outColor;
 
+vec3 sampleLutTrilinear(vec3 coordinate) {
+  ivec3 dimensions = textureSize(uLut, 0);
+  vec3 position = clamp(coordinate, 0.0, 1.0) * vec3(dimensions - ivec3(1));
+  ivec3 lower = ivec3(floor(position));
+  ivec3 upper = min(lower + ivec3(1), dimensions - ivec3(1));
+  vec3 fraction = fract(position);
+  vec3 c00 = mix(texelFetch(uLut, ivec3(lower.x, lower.y, lower.z), 0).rgb, texelFetch(uLut, ivec3(upper.x, lower.y, lower.z), 0).rgb, fraction.x);
+  vec3 c10 = mix(texelFetch(uLut, ivec3(lower.x, upper.y, lower.z), 0).rgb, texelFetch(uLut, ivec3(upper.x, upper.y, lower.z), 0).rgb, fraction.x);
+  vec3 c01 = mix(texelFetch(uLut, ivec3(lower.x, lower.y, upper.z), 0).rgb, texelFetch(uLut, ivec3(upper.x, lower.y, upper.z), 0).rgb, fraction.x);
+  vec3 c11 = mix(texelFetch(uLut, ivec3(lower.x, upper.y, upper.z), 0).rgb, texelFetch(uLut, ivec3(upper.x, upper.y, upper.z), 0).rgb, fraction.x);
+  return mix(mix(c00, c10, fraction.y), mix(c01, c11, fraction.y), fraction.z);
+}
+
 vec4 sourceSample(vec2 uv) {
   if (uBlur <= 0.01) return texture(uTexture, uv);
   vec2 stepSize = uTexel * uBlur;
@@ -110,7 +123,7 @@ void main() {
   color = clamp(hueMatrix * color, 0.0, 1.0);
   if (uUseLut && uLutStrength > 0.0) {
     vec3 lutCoordinate = clamp((color - uLutDomainMin) / (uLutDomainMax - uLutDomainMin), 0.0, 1.0);
-    vec3 graded = texture(uLut, lutCoordinate).rgb;
+    vec3 graded = sampleLutTrilinear(lutCoordinate);
     color = mix(color, graded, clamp(uLutStrength, 0.0, 1.0));
   }
   float alpha = sampleColor.a * uOpacity;
@@ -237,8 +250,8 @@ export class WebGLCompositor {
             this.lutTextures.set(layer.lut.id, lutTexture)
             gl.activeTexture(gl.TEXTURE1)
             gl.bindTexture(gl.TEXTURE_3D, lutTexture)
-            gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-            gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+            gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+            gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
             gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
             gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
             gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE)
