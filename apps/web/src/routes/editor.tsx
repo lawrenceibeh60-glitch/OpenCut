@@ -32,7 +32,7 @@ const formatTime = (seconds: number, rate: RationalFrameRate = SEQUENCE_FRAME_RA
 }
 const mediaKind = (file: File): MediaKind | null => file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('image/') ? 'image' : null
 const formatFrameRate = (rate: RationalFrameRate) => `${Number((rate.numerator / rate.denominator).toFixed(3))} FPS`
-const DEFAULT_CLIP_EFFECTS: ClipEffects = { blendMode: 'normal', brightness: 100, contrast: 100, saturation: 100, blur: 0, grayscale: 0, sepia: 0, hueRotate: 0, opacity: 100, positionX: 0, positionY: 0, scaleX: 1, scaleY: 1, rotation: 0 }
+const DEFAULT_CLIP_EFFECTS: ClipEffects = { volume: 100, blendMode: 'normal', brightness: 100, contrast: 100, saturation: 100, blur: 0, grayscale: 0, sepia: 0, hueRotate: 0, opacity: 100, positionX: 0, positionY: 0, scaleX: 1, scaleY: 1, rotation: 0 }
 
 function Editor() {
   const [assets, setAssets] = useState<MediaAsset[]>([])
@@ -250,6 +250,8 @@ function Editor() {
       const media = videoElementsRef.current.get(clip.id)
       if (!media) continue
       const sourceTime = clip.sourceIn + Math.max(0, playhead - clip.start)
+      const effects = evaluateClipEffects(clip.effects ?? DEFAULT_CLIP_EFFECTS, clip.keyframes, secondsToFrames(Math.max(0, playhead - clip.start), projectFrameRate))
+      media.volume = Math.min(1, Math.max(0, effects.volume / 100))
       if (!playing && Number.isFinite(sourceTime) && Math.abs(media.currentTime - sourceTime) > 0.04) {
         try { media.currentTime = sourceTime } catch { /* metadata may not be ready yet */ }
       }
@@ -271,6 +273,8 @@ function Editor() {
         continue
       }
       const sourceTime = clip.sourceIn + Math.max(0, playhead - clip.start)
+      const effects = evaluateClipEffects(clip.effects ?? DEFAULT_CLIP_EFFECTS, clip.keyframes, secondsToFrames(Math.max(0, playhead - clip.start), projectFrameRate))
+      media.volume = Math.min(1, Math.max(0, effects.volume / 100))
       if (Math.abs(media.currentTime - sourceTime) > 0.25) {
         try { media.currentTime = sourceTime } catch { /* metadata may not be ready yet */ }
       }
@@ -851,6 +855,7 @@ function Editor() {
               <label className="kx-field"><span>Sepia · {selectedEffects.sepia}%</span><input type="range" min="0" max="100" value={selectedEffects.sepia} onChange={(event) => updateEffect({ sepia: Number(event.target.value) })} /></label>
               <label className="kx-field"><span>Hue rotation · {selectedEffects.hueRotate}°</span><input type="range" min="0" max="360" value={selectedEffects.hueRotate} onChange={(event) => updateEffect({ hueRotate: Number(event.target.value) })} /></label>
               <label className="kx-field"><span>Opacity · {selectedEffects.opacity}% <button type="button" className="kx-keyframe-button" title="Add or update opacity keyframe" onClick={() => addKeyframe('opacity')}>{selectedClip.keyframes?.some((keyframe) => keyframe.frame === selectedFrame && keyframe.property === 'opacity') ? '◆' : '◇'}</button></span><input type="range" min="0" max="100" value={selectedEffects.opacity} onChange={(event) => updateEffect({ opacity: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Audio level · {selectedEffects.volume}% <button type="button" className="kx-keyframe-button" title="Add or update audio level keyframe" onClick={() => addKeyframe('volume')}>{selectedClip.keyframes?.some((keyframe) => keyframe.frame === selectedFrame && keyframe.property === 'volume') ? '◆' : '◇'}</button></span><input type="range" min="0" max="200" value={selectedEffects.volume} onChange={(event) => updateEffect({ volume: Number(event.target.value) })} /></label>
               <label className="kx-field"><span>Blend mode</span><select value={selectedEffects.blendMode} onChange={(event) => updateEffect({ blendMode: event.target.value as ClipEffects['blendMode'] })}><option value="normal">Normal</option><option value="multiply">Multiply</option><option value="screen">Screen</option><option value="add">Add</option></select></label>
               <div className="kx-section-label">TRANSFORM</div>
               <label className="kx-field"><span>Position X · {selectedEffects.positionX}% <button type="button" className="kx-keyframe-button" title="Add or update positionX keyframe" onClick={() => addKeyframe('positionX')}>{selectedClip.keyframes?.some((keyframe) => keyframe.frame === selectedFrame && keyframe.property === 'positionX') ? '◆' : '◇'}</button></span><input type="range" min="-100" max="100" value={selectedEffects.positionX} onChange={(event) => updateEffect({ positionX: Number(event.target.value) })} /></label>
