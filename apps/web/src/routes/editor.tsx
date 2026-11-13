@@ -545,7 +545,7 @@ function Editor() {
       document.body.appendChild(link)
       link.click()
       link.remove()
-      URL.revokeObjectURL(url)
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
       setNotice(`Downloaded ${filename}`)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not download LUT')
@@ -571,7 +571,7 @@ function Editor() {
         },
       })
       const outputId = createId()
-      const outputName = `${selectedAsset.name.replace(/\\.[^.]+$/, '')}-background-removed.png`
+      const outputName = `${selectedAsset.name.split('.').slice(0, -1).join('.') || selectedAsset.name}-background-removed.png`
       await saveMediaBlob(outputId, result.blob, outputName)
       const url = URL.createObjectURL(result.blob)
       objectUrls.current.push(url)
