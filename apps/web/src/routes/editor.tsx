@@ -169,7 +169,7 @@ function Editor() {
                 id: clip.id, mediaId: clip.mediaId,
                 start: framesToSeconds(clip.timelineStartFrame, frameRate),
                 sourceIn: framesToSeconds(clip.sourceInFrame, frameRate),
-                duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled, effects: clip.effects, keyframes: clip.keyframes, parentClipId: clip.parentClipId, parentClipId: clip.parentClipId,
+                duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled, effects: clip.effects, keyframes: clip.keyframes, parentClipId: clip.parentClipId,
               })),
             })))
             setProjectId(manifest.id ?? createId())
