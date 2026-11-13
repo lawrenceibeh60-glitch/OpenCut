@@ -266,3 +266,22 @@
   .kx-timeline-tools { gap: 3px; }
   .kx-timeline-tools button { padding: 0 4px; }
 }
+
+
+.kx-text-tools { display: flex; flex-direction: column; gap: 9px; padding: 12px; }
+.kx-text-label { color: #b9b9b9; font: 600 9px Inter, sans-serif; letter-spacing: .08em; }
+.kx-title-input {
+  width: 100%; min-height: 88px; resize: vertical;
+  padding: 9px; color: #eee; background: #1c1c1c;
+  border: 1px solid #4b4b4b; border-radius: 2px;
+  font: 12px/1.5 Inter, sans-serif;
+}
+.kx-title-input:focus { outline: 1px solid #d6ad5c; border-color: #d6ad5c; }
+.kx-create-title { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; }
+.kx-text-help {
+  display: flex; flex-direction: column; gap: 4px;
+  margin-top: 8px; padding: 10px;
+  background: #2d2d2d; border: 1px solid #414141;
+}
+.kx-text-help strong { color: #e4c27c; font-size: 10px; }
+.kx-text-help span { color: #999; font-size: 9px; line-height: 1.5; }
