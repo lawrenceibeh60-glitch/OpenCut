@@ -454,3 +454,11 @@
 .kx-export-format { display: flex; align-items: center; gap: 7px; padding: 0 8px; border: 1px solid var(--kx-line, #283545); color: var(--kx-muted, #91a0af); font: 10px/1.2 inherit; letter-spacing: .08em; }
 .kx-export-format select { min-width: 112px; border: 0; outline: 0; background: transparent; color: var(--kx-text, #e8edf2); font: inherit; letter-spacing: normal; }
 .kx-export-format option { color: #111827; }
+
+.kx-preview-stage[data-gpu-preview="true"] { position: relative; }
+.kx-preview-stage[data-gpu-preview="true"] .kx-composition-layer { visibility: hidden; }
+.kx-preview-stage[data-gpu-preview="true"] .kx-export-canvas {
+  position: absolute; inset: 0; left: 0; top: 0;
+  width: 100%; height: 100%; opacity: 1; z-index: 8;
+  pointer-events: none;
+}
