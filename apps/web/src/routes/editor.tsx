@@ -12,7 +12,7 @@ import { createWebGLCompositor, type WebGLCompositor } from '../lib/webgl-compos
 import { getMediaBlob, saveMediaBlob } from '../lib/media-storage'
 import { clampTimelineTime, getActivePlaybackClips, getPrimaryPreviewClip } from '../lib/timeline-playback'
 import { decodeProjectArchive, encodeProjectArchive, isProjectArchive } from '../lib/project-archive'
-import { CREATIVE_ASSET_SOURCES, CREATIVE_PRESETS } from '../lib/creative-library'
+import { CREATIVE_ASSET_SOURCES, CREATIVE_LUT_ASSETS, CREATIVE_PRESETS } from '../lib/creative-library'
 import type { CreativePreset, CreativePresetKind } from '../lib/creative-library'
 import {
   AudioLines, ChevronDown, Clapperboard, Film, FolderOpen, ImagePlus, Layers3,
@@ -531,6 +531,27 @@ function Editor() {
     setNotice(`Applied ${preset.name} to ${selectedAsset?.name ?? 'selected layer'}`)
   }
 
+  const downloadBundledLut = async (filename: string) => {
+    try {
+      const response = await fetch('/assets/luts/catalog.json')
+      if (!response.ok) throw new Error('Could not load the bundled LUT catalog')
+      const catalog = await response.json() as { luts: Array<{ filename: string; data: string }> }
+      const lut = catalog.luts.find((item) => item.filename === filename)
+      if (!lut) throw new Error('LUT file was not found in the bundled catalog')
+      const url = URL.createObjectURL(new Blob([lut.data], { type: 'text/plain' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = lut.filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      setNotice(`Downloaded ${filename}`)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not download LUT')
+    }
+  }
+
   const removeSelectedBackground = async () => {
     if (!selectedClip || selectedAsset?.kind !== 'image' || !selectedAsset.url || backgroundRemovalBusy) return
     setBackgroundRemovalBusy(true)
@@ -1027,7 +1048,7 @@ function Editor() {
               <button onClick={() => updateSelectedClip({ effects: { ...DEFAULT_CLIP_EFFECTS } })}>Reset effects</button>
             </> : <div className="kx-empty-small"><WandSparkles size={22} /><span>Select a video or image clip to edit its live effects.</span></div>}
           </div>}
-          {activeTab === 'library' && <div className="kx-text-tools"><div className="kx-section-label">DOWNLOADABLE CREATIVE ASSET SOURCES</div><p className="kx-effect-note">Curated source libraries. Open a source to download its packs; check the license on each asset before use.</p>{CREATIVE_ASSET_SOURCES.map((source) => <a className="kx-source-card" href={source.url} target="_blank" rel="noreferrer" key={source.id}><span><strong>{source.name}</strong><small>{source.category} · {source.license}</small><small>{source.details}</small></span><b>OPEN ↗</b></a>)}<div className="kx-section-label">FONT COLLECTION</div><p className="kx-effect-note">Twenty curated families are available in the title builder. The Google Fonts family files load on demand.</p></div>}
+          {activeTab === 'library' && <div className="kx-text-tools"><div className="kx-section-label">BUNDLED 3D LUT LIBRARY <span>{CREATIVE_LUT_ASSETS.length}</span></div><p className="kx-effect-note">15 downloadable .cube looks. Source collection: YahiaAngelo/Film-Luts · MIT license. The current renderer does not yet apply 3D LUTs.</p>{CREATIVE_LUT_ASSETS.map((lut) => <div className="kx-source-card" key={lut.filename}><span><strong>{lut.name}</strong><small>{lut.category} · .cube · MIT</small></span><button onClick={() => void downloadBundledLut(lut.filename)}>DOWNLOAD</button></div>)}<div className="kx-section-label">DOWNLOADABLE CREATIVE ASSET SOURCES</div><p className="kx-effect-note">Curated external libraries. Open a source to download their packs; check the license on each asset before use.</p>{CREATIVE_ASSET_SOURCES.map((source) => <a className="kx-source-card" href={source.url} target="_blank" rel="noreferrer" key={source.id}><span><strong>{source.name}</strong><small>{source.category} · {source.license}</small><small>{source.details}</small></span><b>OPEN ↗</b></a>)}<div className="kx-section-label">FONT COLLECTION</div><p className="kx-effect-note">Twenty curated families are available in the title builder. The Google Fonts family files load on demand.</p></div>}
           {activeTab === 'text' && <div className="kx-text-tools">
             <div className="kx-section-label">CREATE GRAPHICS</div>
             <label className="kx-field"><span>Font family</span><select value={titleFontFamily} onChange={(event) => setTitleFontFamily(event.target.value)}>{['Inter','Montserrat','Oswald','Roboto Mono','Playfair Display','Bebas Neue','Space Grotesk','Archivo Black','DM Sans','Manrope','Poppins','Anton','Merriweather','Raleway','Outfit','Sora','Lora','Barlow Condensed','Cinzel','IBM Plex Sans'].map((font) => <option key={font} value={font}>{font}</option>)}</select></label>
