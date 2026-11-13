@@ -298,3 +298,15 @@
   border: 1px solid #65512d; font-size: 9px;
 }
 .kx-preview-stage audio { display: none; }
+
+
+.kx-shape-color {
+  display: flex; align-items: center; justify-content: space-between;
+  color: #b9b9b9; font: 600 9px Inter, sans-serif; letter-spacing: .06em;
+}
+.kx-shape-color input {
+  width: 42px; height: 25px; padding: 2px;
+  border: 1px solid #4b4b4b; border-radius: 2px; background: #1c1c1c;
+}
+.kx-shape-buttons { display: flex; gap: 6px; }
+.kx-shape-buttons button { flex: 1; }
