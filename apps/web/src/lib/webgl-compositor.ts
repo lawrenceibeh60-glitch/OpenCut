@@ -1,5 +1,33 @@
 import type { ClipEffects } from './project-format'
 
+
+/** Build the source-fit, scale, rotation and translation matrix used by the GPU vertex shader. */
+export function createLayerTransform(
+  width: number,
+  height: number,
+  sourceWidth: number,
+  sourceHeight: number,
+  effects: Pick<ClipEffects, 'scaleX' | 'scaleY' | 'rotation' | 'positionX' | 'positionY'>,
+): Float32Array {
+  if (![width, height, sourceWidth, sourceHeight].every((value) => Number.isFinite(value) && value > 0)) {
+    throw new Error('Canvas and source dimensions must be positive finite numbers')
+  }
+  const canvasAspect = width / height
+  const sourceAspect = sourceWidth / sourceHeight
+  const fitX = sourceAspect > canvasAspect ? 1 : sourceAspect / canvasAspect
+  const fitY = sourceAspect > canvasAspect ? canvasAspect / sourceAspect : 1
+  const scaleX = fitX * effects.scaleX
+  const scaleY = fitY * effects.scaleY
+  const radians = effects.rotation * Math.PI / 180
+  const cosine = Math.cos(radians)
+  const sine = Math.sin(radians)
+  return new Float32Array([
+    cosine * scaleX, sine * scaleX, 0,
+    -sine * scaleY, cosine * scaleY, 0,
+    effects.positionX / 50, -effects.positionY / 50, 1,
+  ])
+}
+
 export type GpuLayer = {
   id: string
   source: HTMLImageElement | HTMLVideoElement
@@ -182,20 +210,7 @@ export class WebGLCompositor {
         continue
       }
       const effects = layer.effects
-      const canvasAspect = width / height
-      const sourceAspect = sourceWidth / sourceHeight
-      const fitX = sourceAspect > canvasAspect ? 1 : sourceAspect / canvasAspect
-      const fitY = sourceAspect > canvasAspect ? canvasAspect / sourceAspect : 1
-      const scaleX = fitX * effects.scaleX
-      const scaleY = fitY * effects.scaleY
-      const radians = effects.rotation * Math.PI / 180
-      const cosine = Math.cos(radians)
-      const sine = Math.sin(radians)
-      const transform = new Float32Array([
-        cosine * scaleX, sine * scaleX, 0,
-        -sine * scaleY, cosine * scaleY, 0,
-        effects.positionX / 50, -effects.positionY / 50, 1,
-      ])
+      const transform = createLayerTransform(width, height, sourceWidth, sourceHeight, effects)
       gl.uniformMatrix3fv(this.locations.uTransform, false, transform)
       gl.uniform2f(this.locations.uTexel, 1 / sourceWidth, 1 / sourceHeight)
       gl.uniform1f(this.locations.uOpacity, effects.opacity / 100)
