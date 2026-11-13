@@ -12,6 +12,11 @@ export type ClipEffects = {
   sepia: number
   hueRotate: number
   opacity: number
+  positionX: number
+  positionY: number
+  scaleX: number
+  scaleY: number
+  rotation: number
 }
 
 export type ProjectManifest = {
@@ -173,6 +178,11 @@ export function parseProjectManifest(source: string): ProjectManifest {
         sepia: boundedNumber(effectsValue.sepia, 'Effect sepia', 0, 100, 0),
         hueRotate: boundedNumber(effectsValue.hueRotate, 'Effect hue rotation', 0, 360, 0),
         opacity: boundedNumber(effectsValue.opacity, 'Effect opacity', 0, 100, 100),
+        positionX: boundedNumber(effectsValue.positionX, 'Effect position X', -100, 100, 0),
+        positionY: boundedNumber(effectsValue.positionY, 'Effect position Y', -100, 100, 0),
+        scaleX: boundedNumber(effectsValue.scaleX, 'Effect scale X', 0.1, 5, 1),
+        scaleY: boundedNumber(effectsValue.scaleY, 'Effect scale Y', 0.1, 5, 1),
+        rotation: boundedNumber(effectsValue.rotation, 'Effect rotation', -180, 180, 0),
       } : undefined
       return {
         id: clipId, mediaId, timelineStartFrame, sourceInFrame, durationFrames,
