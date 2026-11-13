@@ -436,3 +436,17 @@
   font-size: 9px; font-weight: 700; white-space: nowrap;
 }
 .kx-source-card button:hover { border-color: #d6ad5c; color: #fff0ce; }
+
+.kx-watermark-tool {
+  display: flex; flex-direction: column; gap: 8px;
+  margin: 10px 0; padding: 10px;
+  background: #28251f; border: 1px solid #65512f;
+}
+.kx-watermark-tool > strong { color: #e8c98d; font-size: 9px; letter-spacing: .08em; }
+.kx-watermark-tool label { display: flex; align-items: flex-start; gap: 7px; color: #c6c0b4; font-size: 9px; line-height: 1.45; }
+.kx-watermark-tool button {
+  min-height: 28px; color: #f0d39b; background: #30291e;
+  border: 1px solid #66502e; border-radius: 2px; font-size: 9px; font-weight: 700;
+}
+.kx-watermark-tool button:disabled { opacity: .4; cursor: not-allowed; }
+.kx-watermark-tool small { color: #999; font-size: 9px; line-height: 1.45; }
