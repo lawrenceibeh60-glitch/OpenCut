@@ -3,7 +3,7 @@ import { CREATIVE_PRESETS, CREATIVE_ASSET_SOURCES, validateCreativePresets } fro
 
 describe('creative preset library', () => {
   it('contains a large, uniquely identified preset collection', () => {
-    expect(CREATIVE_PRESETS.length).toBeGreaterThanOrEqual(80)
+    expect(CREATIVE_PRESETS.length).toBeGreaterThanOrEqual(250)
     expect(validateCreativePresets()).toBe(true)
     expect(new Set(CREATIVE_PRESETS.map((preset) => preset.id)).size).toBe(CREATIVE_PRESETS.length)
   })
