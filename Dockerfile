@@ -19,6 +19,8 @@ COPY --from=wasm-builder /app/bunfig.toml ./bunfig.toml
 WORKDIR /app/apps/web
 COPY --from=wasm-builder /app/apps/web ./
 RUN bun install --no-progress
+RUN bun run test
+RUN bun run check
 RUN bun run build
 EXPOSE 3000
 CMD ["bun", "run", "start"]
