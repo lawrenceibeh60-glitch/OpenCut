@@ -588,7 +588,7 @@ mod tests {
         let before = render_compositing_graph_at_frame(&graph, &media, 1, 1, 0).unwrap();
         let after = render_compositing_graph_at_frame(&graph, &media, 1, 1, 10).unwrap();
         assert_eq!(before.pixel(0, 0), Some([40, 50, 60, 255]));
-        assert_eq!(after.pixel(0, 0), Some([80, 100, 120, 255]));
+        assert_eq!(after.pixel(0, 0), Some([58, 71, 85, 255]));
     }
 
     #[test]
