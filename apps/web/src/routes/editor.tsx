@@ -22,6 +22,7 @@ type MediaKind = 'video' | 'audio' | 'image'
 type MediaAsset = { id: string; name: string; kind: MediaKind; url: string; size: number; duration: number; durationKnown: boolean; mimeType: string; missing?: boolean }
 type TimelineClip = { id: string; mediaId: string; start: number; sourceIn: number; duration: number; enabled: boolean; effects?: ClipEffects; keyframes?: ClipKeyframe[] }
 type TimelineTrack = { id: string; name: string; kind: 'video' | 'audio' | 'graphics' | 'adjustment'; clips: TimelineClip[]; muted: boolean; locked: boolean }
+type TrimDrag = { clipId: string; trackId: string; edge: 'left' | 'right'; startX: number; start: number; sourceIn: number; duration: number }
 
 const createId = () => globalThis.crypto?.randomUUID?.() ?? `kyro-${Date.now()}-${Math.random().toString(16).slice(2)}`
 const formatTime = (seconds: number, rate: RationalFrameRate = SEQUENCE_FRAME_RATE) => {
@@ -48,6 +49,7 @@ function Editor() {
   const [titleFontSize, setTitleFontSize] = useState(88)
   const [shapeColor, setShapeColor] = useState('#d6ad5c')
   const [isExporting, setIsExporting] = useState(false)
+  const [trimDrag, setTrimDrag] = useState<TrimDrag | null>(null)
   const [projectName, setProjectName] = useState('Untitled project')
   const [projectId, setProjectId] = useState<string>(createId())
   const [projectFrameRate, setProjectFrameRate] = useState<RationalFrameRate>(SEQUENCE_FRAME_RATE)
@@ -65,6 +67,47 @@ function Editor() {
   const recordingChunksRef = useRef<Blob[]>([])
   const objectUrls = useRef<string[]>([])
   useEffect(() => () => objectUrls.current.forEach((url) => URL.revokeObjectURL(url)), [])
+
+  useEffect(() => {
+    if (!trimDrag) return
+    const move = (event: PointerEvent) => {
+      const requested = framesToSeconds(secondsToFrames((event.clientX - trimDrag.startX) / 12, projectFrameRate), projectFrameRate)
+      const track = tracks.find((item) => item.id === trimDrag.trackId)
+      const clip = track?.clips.find((item) => item.id === trimDrag.clipId)
+      if (!track || !clip || track.locked) return
+      const asset = assets.find((item) => item.id === clip.mediaId)
+      const oneFrame = framesToSeconds(1, projectFrameRate)
+      setTracks((current) => current.map((item) => item.id !== trimDrag.trackId ? item : {
+        ...item,
+        clips: item.clips.map((entry) => {
+          if (entry.id !== trimDrag.clipId) return entry
+          if (trimDrag.edge === 'right') {
+            const maximum = asset?.durationKnown ? Math.max(oneFrame, asset.duration - trimDrag.sourceIn) : Number.POSITIVE_INFINITY
+            return { ...entry, duration: Math.min(maximum, Math.max(oneFrame, trimDrag.duration + requested)) }
+          }
+          const maximumRight = trimDrag.duration - oneFrame
+          const minimumLeft = -trimDrag.sourceIn
+          const maximumSource = asset?.durationKnown ? asset.duration - trimDrag.sourceIn - oneFrame : maximumRight
+          const delta = Math.min(maximumRight, maximumSource, Math.max(minimumLeft, requested))
+          return {
+            ...entry,
+            start: Math.max(0, trimDrag.start + delta),
+            sourceIn: Math.max(0, trimDrag.sourceIn + delta),
+            duration: Math.max(oneFrame, trimDrag.duration - delta),
+          }
+        }),
+      }))
+    }
+    const finish = () => setTrimDrag(null)
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', finish, { once: true })
+    window.addEventListener('pointercancel', finish, { once: true })
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', finish)
+      window.removeEventListener('pointercancel', finish)
+    }
+  }, [trimDrag, projectFrameRate, tracks, assets])
 
   useEffect(() => {
     let active = true
@@ -874,9 +917,11 @@ function Editor() {
                 <div className="kx-track-lane" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const clipId = event.dataTransfer.getData('application/x-kyrocut-clip'); if (clipId) { const bounds = event.currentTarget.getBoundingClientRect(); moveClipOnTimeline(clipId, track.id, (event.clientX - bounds.left) / 12) } }}>
                   {track.clips.map((clip) => {
                     const asset = assets.find((item) => item.id === clip.mediaId)
-                    return <button key={clip.id} draggable onDragStart={(event) => { event.dataTransfer.setData('application/x-kyrocut-clip', clip.id); event.dataTransfer.effectAllowed = 'move' }} className={`kx-clip ${track.kind} ${selectedClipId === clip.id ? 'selected' : ''} ${clip.enabled ? '' : 'disabled'}`} style={{ left: `${clip.start * 12}px`, width: `${Math.max(48, clip.duration * 12)}px` }} onClick={() => { setSelectedClipId(clip.id); setPlayhead(clip.start) }} title={asset?.name ?? 'Missing media'}>
+                    return <button key={clip.id} draggable={!track.locked} onDragStart={(event) => { event.dataTransfer.setData('application/x-kyrocut-clip', clip.id); event.dataTransfer.effectAllowed = 'move' }} className={`kx-clip ${track.kind} ${selectedClipId === clip.id ? 'selected' : ''} ${clip.enabled ? '' : 'disabled'}`} style={{ left: `${clip.start * 12}px`, width: `${Math.max(48, clip.duration * 12)}px` }} onClick={() => { setSelectedClipId(clip.id); setPlayhead(clip.start) }} title={asset?.name ?? 'Missing media'}>
+                      {!track.locked && <span className="kx-trim-handle left" role="presentation" onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); setTrimDrag({ clipId: clip.id, trackId: track.id, edge: 'left', startX: event.clientX, start: clip.start, sourceIn: clip.sourceIn, duration: clip.duration }) }} />}
                       <span className="kx-clip-wave">{track.kind === 'audio' ? '▂▅▃▇▂▆▃▅▂▇▃▅' : '▥ ▥ ▥ ▥ ▥ ▥'}</span><strong>{asset?.name ?? 'Offline media'}</strong>
                       {clip.keyframes?.map((keyframe, index) => <span key={`${keyframe.property}-${keyframe.frame}-${index}`} className="kx-keyframe-marker" style={{ left: `${framesToSeconds(keyframe.frame, projectFrameRate) * 12}px` }} title={`${keyframe.property} · frame ${keyframe.frame}`} aria-hidden="true">◆</span>)}
+                      {!track.locked && <span className="kx-trim-handle right" role="presentation" onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); setTrimDrag({ clipId: clip.id, trackId: track.id, edge: 'right', startX: event.clientX, start: clip.start, sourceIn: clip.sourceIn, duration: clip.duration }) }} />}
                     </button>
                   })}
                   <div className="kx-playhead" style={{ left: `${playhead * 12}px` }} />
