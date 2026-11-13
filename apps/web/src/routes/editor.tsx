@@ -159,11 +159,15 @@ function Editor() {
     if (!selectedClip) return
     const value = selectedEffects[property]
     const existing = selectedClip.keyframes ?? []
-    const match = existing.find((keyframe) => keyframe.frame === selectedFrame && keyframe.property === property)
+    const propertyKeys = existing.filter((keyframe) => keyframe.property === property)
+    const match = propertyKeys.find((keyframe) => keyframe.frame === selectedFrame)
+    const withBase = propertyKeys.length === 0 || propertyKeys[0].frame > 0
+      ? [...existing, { frame: 0, property, value: selectedBaseEffects[property], interpolation: 'linear' as const }]
+      : existing
     const keyframe: ClipKeyframe = { frame: selectedFrame, property, value, interpolation: match?.interpolation ?? 'linear' }
     const keyframes = match
-      ? existing.map((item) => item === match ? keyframe : item)
-      : [...existing, keyframe].sort((a, b) => a.frame - b.frame)
+      ? withBase.map((item) => item.frame === match.frame && item.property === match.property ? keyframe : item)
+      : [...withBase, keyframe].sort((a, b) => a.frame - b.frame)
     updateSelectedClip({ keyframes })
     setNotice(`Added ${property} keyframe at frame ${selectedFrame}`)
   }
