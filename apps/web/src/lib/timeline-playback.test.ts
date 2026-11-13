@@ -32,3 +32,12 @@ describe('timeline playback resolution', () => {
     expect(clampTimelineTime(Number.NaN, 10)).toBe(0)
   })
 })
+
+  it('handles a one-frame clip and excludes malformed durations', () => {
+    const single = [{ id: 'v1', kind: 'video' as const, muted: false, clips: [
+      { id: 'one-frame', mediaId: 'a', start: 2, duration: 1 / 30, enabled: true },
+      { id: 'invalid', mediaId: 'b', start: 2, duration: 0, enabled: true },
+    ] }]
+    expect(getActivePlaybackClips(single, 2).map(({ clip }) => clip.id)).toEqual(['one-frame'])
+    expect(getActivePlaybackClips(single, 2 + 1 / 30)).toEqual([])
+  })
