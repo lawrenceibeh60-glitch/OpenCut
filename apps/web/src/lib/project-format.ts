@@ -5,7 +5,7 @@ export type ProjectTrackKind = 'video' | 'audio' | 'graphics' | 'adjustment'
 
 export type ClipKeyframe = {
   frame: number
-  property: 'opacity' | 'volume' | 'positionX' | 'positionY' | 'scaleX' | 'scaleY' | 'rotation'
+  property: 'opacity' | 'volume' | 'positionX' | 'positionY' | 'scaleX' | 'scaleY' | 'rotation' | 'brightness' | 'contrast' | 'saturation' | 'blur' | 'grayscale' | 'sepia' | 'hueRotate'
   value: number
   interpolation: 'linear' | 'hold'
 }
@@ -207,12 +207,16 @@ export function parseProjectManifest(source: string): ProjectManifest {
           const frame = integerValue(keyframe.frame, 'Keyframe frame')
           const property = keyframe.property
           if (property !== 'opacity' && property !== 'volume' && property !== 'positionX' && property !== 'positionY' &&
-              property !== 'scaleX' && property !== 'scaleY' && property !== 'rotation') {
+              property !== 'scaleX' && property !== 'scaleY' && property !== 'rotation' &&
+              property !== 'brightness' && property !== 'contrast' && property !== 'saturation' && property !== 'blur' &&
+              property !== 'grayscale' && property !== 'sepia' && property !== 'hueRotate') {
             throw new Error('Unsupported keyframe property')
           }
           const bounds: Record<ClipKeyframe['property'], [number, number]> = {
             opacity: [0, 100], volume: [0, 200], positionX: [-100, 100], positionY: [-100, 100],
             scaleX: [0.1, 5], scaleY: [0.1, 5], rotation: [-180, 180],
+            brightness: [0, 200], contrast: [0, 200], saturation: [0, 200], blur: [0, 20],
+            grayscale: [0, 100], sepia: [0, 100], hueRotate: [0, 360],
           }
           if (typeof keyframe.value !== 'number') throw new Error('Keyframe value must be a number')
           const value = boundedNumber(keyframe.value, 'Keyframe value', bounds[property][0], bounds[property][1], 0)
