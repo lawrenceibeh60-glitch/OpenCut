@@ -12,7 +12,7 @@ use serde_json::Value;
 
 use crate::{
     BlendMode, ColorAdjustments, CompositeLayer, RenderError, RgbaImage, Transform2D,
-    TransformedLayer, apply_chroma_key, apply_color_adjustments, composite, composite_transformed,
+    TransformedLayer, apply_chroma_key, apply_color_adjustments_linear, composite, composite_transformed,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -237,7 +237,7 @@ pub fn render_compositing_graph(
                     gamma: number_parameter(node, "gamma", 1.0)? as f32,
                     brightness: number_parameter(node, "brightness", 0.0)? as f32,
                 };
-                let graded = apply_color_adjustments(&image, adjustments)?;
+                let graded = apply_color_adjustments_linear(&image, adjustments)?;
                 values.insert((node.id.clone(), "image".into()), GraphValue::Image(graded));
             }
             NodeOperation::ChromaKey => {
