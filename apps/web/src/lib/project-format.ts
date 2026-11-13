@@ -3,6 +3,13 @@ import type { RationalFrameRate } from './timebase'
 export type ProjectMediaKind = 'video' | 'audio' | 'image'
 export type ProjectTrackKind = 'video' | 'audio' | 'graphics' | 'adjustment'
 
+export type ClipKeyframe = {
+  frame: number
+  property: 'opacity' | 'positionX' | 'positionY' | 'scaleX' | 'scaleY' | 'rotation'
+  value: number
+  interpolation: 'linear' | 'hold'
+}
+
 export type ClipEffects = {
   brightness: number
   contrast: number
@@ -50,6 +57,7 @@ export type ProjectManifest = {
       durationFrames: number
       enabled: boolean
       effects?: ClipEffects
+      keyframes?: ClipKeyframe[]
     }>
   }>
   playheadFrame: number
@@ -184,10 +192,39 @@ export function parseProjectManifest(source: string): ProjectManifest {
         scaleY: boundedNumber(effectsValue.scaleY, 'Effect scale Y', 0.1, 5, 1),
         rotation: boundedNumber(effectsValue.rotation, 'Effect rotation', -180, 180, 0),
       } : undefined
+      if (clip.keyframes !== undefined && !Array.isArray(clip.keyframes)) {
+        throw new Error('Clip keyframes must be an array')
+      }
+      const keyframeIdentities = new Set<string>()
+      const keyframes: ClipKeyframe[] | undefined = Array.isArray(clip.keyframes)
+        ? clip.keyframes.map((keyframeValue, keyframeIndex) => {
+          const keyframe = record(keyframeValue, 'Keyframe ' + keyframeIndex)
+          const frame = integerValue(keyframe.frame, 'Keyframe frame')
+          const property = keyframe.property
+          if (property !== 'opacity' && property !== 'positionX' && property !== 'positionY' &&
+              property !== 'scaleX' && property !== 'scaleY' && property !== 'rotation') {
+            throw new Error('Unsupported keyframe property')
+          }
+          const bounds: Record<ClipKeyframe['property'], [number, number]> = {
+            opacity: [0, 100], positionX: [-100, 100], positionY: [-100, 100],
+            scaleX: [0.1, 5], scaleY: [0.1, 5], rotation: [-180, 180],
+          }
+          const value = boundedNumber(keyframe.value, 'Keyframe value', bounds[property][0], bounds[property][1], 0)
+          const interpolation = keyframe.interpolation === undefined ? 'linear' : keyframe.interpolation
+          if (interpolation !== 'linear' && interpolation !== 'hold') {
+            throw new Error('Unsupported keyframe interpolation')
+          }
+          const identity = property + ':' + frame
+          if (keyframeIdentities.has(identity)) throw new Error('Duplicate keyframe for ' + property + ' at frame ' + frame)
+          keyframeIdentities.add(identity)
+          return { frame, property, value, interpolation }
+        }).sort((a, b) => a.frame - b.frame)
+        : undefined
       return {
         id: clipId, mediaId, timelineStartFrame, sourceInFrame, durationFrames,
         enabled: clip.enabled === undefined ? true : booleanValue(clip.enabled, 'Clip enabled state'),
         ...(effects ? { effects } : {}),
+        ...(keyframes?.length ? { keyframes } : {}),
       }
     })
     return {
