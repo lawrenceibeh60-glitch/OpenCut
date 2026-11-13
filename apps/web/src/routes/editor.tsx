@@ -5,6 +5,7 @@ import { framesToSeconds, secondsToFrames, SEQUENCE_FRAME_RATE } from '../lib/ti
 import type { RationalFrameRate } from '../lib/timebase'
 import { parseProjectManifest, type ClipEffects, type ClipKeyframe, type ProjectManifest } from '../lib/project-format'
 import { evaluateClipEffects } from '../lib/clip-animation'
+import { applyClipTrim } from '../lib/timeline-editing'
 import { getMediaBlob, saveMediaBlob } from '../lib/media-storage'
 import { clampTimelineTime, getActivePlaybackClips, getPrimaryPreviewClip } from '../lib/timeline-playback'
 import { decodeProjectArchive, encodeProjectArchive, isProjectArchive } from '../lib/project-archive'
@@ -72,30 +73,20 @@ function Editor() {
     if (!trimDrag) return
     const move = (event: PointerEvent) => {
       const deltaFrames = Math.round((event.clientX - trimDrag.startX) / 12 * projectFrameRate.numerator / projectFrameRate.denominator)
-      const requested = deltaFrames * projectFrameRate.denominator / projectFrameRate.numerator
       const track = tracks.find((item) => item.id === trimDrag.trackId)
       const clip = track?.clips.find((item) => item.id === trimDrag.clipId)
       if (!track || !clip || track.locked) return
       const asset = assets.find((item) => item.id === clip.mediaId)
-      const oneFrame = framesToSeconds(1, projectFrameRate)
+      const trimmed = applyClipTrim(
+        { start: trimDrag.start, sourceIn: trimDrag.sourceIn, duration: trimDrag.duration },
+        trimDrag.edge,
+        deltaFrames,
+        projectFrameRate,
+        asset?.durationKnown ? asset.duration : undefined,
+      )
       setTracks((current) => current.map((item) => item.id !== trimDrag.trackId ? item : {
         ...item,
-        clips: item.clips.map((entry) => {
-          if (entry.id !== trimDrag.clipId) return entry
-          if (trimDrag.edge === 'right') {
-            const maximum = asset?.durationKnown ? Math.max(oneFrame, asset.duration - trimDrag.sourceIn) : Number.POSITIVE_INFINITY
-            return { ...entry, duration: Math.min(maximum, Math.max(oneFrame, trimDrag.duration + requested)) }
-          }
-          const maximumRight = trimDrag.duration - oneFrame
-          const minimumLeft = Math.max(-trimDrag.sourceIn, -trimDrag.start)
-          const delta = Math.min(maximumRight, Math.max(minimumLeft, requested))
-          return {
-            ...entry,
-            start: Math.max(0, trimDrag.start + delta),
-            sourceIn: Math.max(0, trimDrag.sourceIn + delta),
-            duration: Math.max(oneFrame, trimDrag.duration - delta),
-          }
-        }),
+        clips: item.clips.map((entry) => entry.id === trimDrag.clipId ? { ...entry, ...trimmed } : entry),
       }))
     }
     const finish = () => setTrimDrag(null)
