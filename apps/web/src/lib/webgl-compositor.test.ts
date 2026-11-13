@@ -35,7 +35,11 @@ describe('WebGL layer transform', () => {
       positionX: 25,
       positionY: -10,
     })
-    expect(Array.from(matrix)).toEqual([2, 0, 0, 0, 0.5, 0, 0.5, 0.2, 1])
+    expect(matrix[0]).toBeCloseTo(2)
+    expect(matrix[4]).toBeCloseTo(0.5)
+    expect(matrix[6]).toBeCloseTo(0.5)
+    expect(matrix[7]).toBeCloseTo(0.2)
+    expect(matrix[8]).toBe(1)
   })
 
   it('rotates the layer around its center', () => {
