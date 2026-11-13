@@ -169,21 +169,11 @@ export const CREATIVE_FONTS = [
 ] as const
 
 export const CREATIVE_LUT_ASSETS = [
-  { name: 'Kodak 2393 Cuspclip', filename: 'kodak_2393_cuspclip.cube', category: 'Print' },
-  { name: 'Fuji 3513 Constlclip', filename: 'fuji_3513_constlclip.cube', category: 'Print' },
-  { name: 'Kodak 2383 Constlmap', filename: 'kodak_2383_constlmap.cube', category: 'Print' },
-  { name: 'Kodak Portra 400 Nc', filename: 'kodak_portra_400_nc.cube', category: 'Negative' },
-  { name: 'Ilford Delta 3200 ++', filename: 'ilford_delta_3200_++.cube', category: 'Black & White' },
-  { name: 'Fuji 160C', filename: 'fuji_160c.cube', category: 'Negative' },
-  { name: 'Kodak Portra 800 +', filename: 'kodak_portra_800_+.cube', category: 'Negative' },
-  { name: 'Ilford HP5 Plus 400', filename: 'ilford_hp_5_plus_400.cube', category: 'Black & White' },
-  { name: 'Fuji Provia 400F', filename: 'fuji_provia_400f.cube', category: 'Slide Film' },
-  { name: 'Kodak Kodachrome 25', filename: 'kodak_kodachrome_25.cube', category: 'Slide Film' },
-  { name: 'Fuji X-Trans III Pro Neg Std', filename: 'fuji_xtrans_iii_pro_neg_std.cube', category: 'Camera Look' },
-  { name: 'Fuji X-Trans III Velvia', filename: 'fuji_xtrans_iii_velvia.cube', category: 'Camera Look' },
-  { name: 'Fuji FP-100C +', filename: 'fuji_fp-100c_+.cube', category: 'Instant Film' },
-  { name: 'Polaroid 665 --', filename: 'polaroid_665_--.cube', category: 'Instant Film' },
-  { name: 'Kodak Elite Color 200', filename: 'kodak_elite_color_200.cube', category: 'Negative Color' },
+  { id: 'kodak-2393', name: 'Kodak 2393 Cuspclip', filename: 'kodak_2393_cuspclip.cube', category: 'Print' },
+  { id: 'fuji-3513', name: 'Fuji 3513 Constlclip', filename: 'fuji_3513_constlclip.cube', category: 'Print' },
+  { id: 'kodak-2383', name: 'Kodak 2383 Constlmap', filename: 'kodak_2383_constlmap.cube', category: 'Print' },
+  { id: 'portra-400', name: 'Kodak Portra 400 NC', filename: 'kodak_portra_400_nc.cube', category: 'Negative' },
+  { id: 'ilford-delta-3200', name: 'Ilford Delta 3200 ++', filename: 'ilford_delta_3200_plus_plus.cube', category: 'Black & White' },
 ] as const
 
 export const CREATIVE_ASSET_SOURCES = [
