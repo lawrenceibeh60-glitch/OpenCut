@@ -189,7 +189,7 @@ function Editor() {
   const selectedBaseEffects = selectedClip?.effects ?? DEFAULT_CLIP_EFFECTS
   const selectedFrame = selectedClip ? secondsToFrames(Math.max(0, playhead - selectedClip.start), projectFrameRate) : 0
   const getClipEffects = (clip: TimelineClip) => {
-    let result = getClipEffects(clip)
+    let result = evaluateClipEffects(clip.effects ?? DEFAULT_CLIP_EFFECTS, clip.keyframes, secondsToFrames(Math.max(0, playhead - clip.start), projectFrameRate))
     let parentId = clip.parentClipId
     const visited = new Set([clip.id])
     while (parentId && !visited.has(parentId)) {
