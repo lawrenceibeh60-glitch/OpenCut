@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import { framesToSeconds, secondsToFrames, SEQUENCE_FRAME_RATE } from '../lib/timebase'
 import type { RationalFrameRate } from '../lib/timebase'
-import { parseProjectManifest, type ClipEffects, type ProjectManifest } from '../lib/project-format'
+import { parseProjectManifest, type ClipEffects, type ClipKeyframe, type ProjectManifest } from '../lib/project-format'
+import { evaluateClipEffects } from '../lib/clip-animation'
 import { getMediaBlob, saveMediaBlob } from '../lib/media-storage'
 import { clampTimelineTime, getActivePlaybackClips, getPrimaryPreviewClip } from '../lib/timeline-playback'
 import { decodeProjectArchive, encodeProjectArchive, isProjectArchive } from '../lib/project-archive'
@@ -19,7 +20,7 @@ export const Route = createFileRoute('/editor')({ component: Editor })
 
 type MediaKind = 'video' | 'audio' | 'image'
 type MediaAsset = { id: string; name: string; kind: MediaKind; url: string; size: number; duration: number; durationKnown: boolean; mimeType: string; missing?: boolean }
-type TimelineClip = { id: string; mediaId: string; start: number; sourceIn: number; duration: number; enabled: boolean; effects?: ClipEffects }
+type TimelineClip = { id: string; mediaId: string; start: number; sourceIn: number; duration: number; enabled: boolean; effects?: ClipEffects; keyframes?: ClipKeyframe[] }
 type TimelineTrack = { id: string; name: string; kind: 'video' | 'audio' | 'graphics' | 'adjustment'; clips: TimelineClip[]; muted: boolean; locked: boolean }
 
 const createId = () => globalThis.crypto?.randomUUID?.() ?? `kyro-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -99,7 +100,7 @@ function Editor() {
                 id: clip.id, mediaId: clip.mediaId,
                 start: framesToSeconds(clip.timelineStartFrame, frameRate),
                 sourceIn: framesToSeconds(clip.sourceInFrame, frameRate),
-                duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled, effects: clip.effects,
+                duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled, effects: clip.effects, keyframes: clip.keyframes,
               })),
             })))
             setProjectId(manifest.id ?? createId())
@@ -136,8 +137,36 @@ function Editor() {
   const projectDuration = Math.max(30, ...allClips.filter((clip) => clip.enabled).map((clip) => clip.start + clip.duration))
   const selectedTrack = tracks.find((track) => track.clips.some((clip) => clip.id === selectedClipId))
   const missingAssets = assets.filter((asset) => !asset.url)
-  const selectedEffects = selectedClip?.effects ?? DEFAULT_CLIP_EFFECTS
-  const updateEffect = (patch: Partial<ClipEffects>) => updateSelectedClip({ effects: { ...selectedEffects, ...patch } })
+  const selectedBaseEffects = selectedClip?.effects ?? DEFAULT_CLIP_EFFECTS
+  const selectedFrame = selectedClip ? secondsToFrames(Math.max(0, playhead - selectedClip.start), projectFrameRate) : 0
+  const selectedEffects = evaluateClipEffects(selectedBaseEffects, selectedClip?.keyframes, selectedFrame)
+  const updateEffect = (patch: Partial<ClipEffects>) => {
+    const existingKeys = selectedClip?.keyframes ?? []
+    let updatedKeyframe = false
+    const keyframes = existingKeys.map((keyframe) => {
+      if (keyframe.frame !== selectedFrame || !(keyframe.property in patch)) return keyframe
+      const value = patch[keyframe.property]
+      if (value === undefined) return keyframe
+      updatedKeyframe = true
+      return { ...keyframe, value }
+    })
+    updateSelectedClip({
+      effects: { ...selectedBaseEffects, ...patch },
+      ...(updatedKeyframe ? { keyframes } : {}),
+    })
+  }
+  const addKeyframe = (property: ClipKeyframe['property']) => {
+    if (!selectedClip) return
+    const value = selectedEffects[property]
+    const existing = selectedClip.keyframes ?? []
+    const match = existing.find((keyframe) => keyframe.frame === selectedFrame && keyframe.property === property)
+    const keyframe: ClipKeyframe = { frame: selectedFrame, property, value, interpolation: match?.interpolation ?? 'linear' }
+    const keyframes = match
+      ? existing.map((item) => item === match ? keyframe : item)
+      : [...existing, keyframe].sort((a, b) => a.frame - b.frame)
+    updateSelectedClip({ keyframes })
+    setNotice(`Added ${property} keyframe at frame ${selectedFrame}`)
+  }
 
   const projectDocument = useMemo(() => ({
     format: 'kyrocut-project', version: 1, application: 'KYROCUT X1',
@@ -155,6 +184,7 @@ function Editor() {
         durationFrames: Math.max(1, secondsToFrames(clip.duration, projectFrameRate)),
         enabled: clip.enabled,
         ...(clip.effects ? { effects: clip.effects } : {}),
+        ...(clip.keyframes?.length ? { keyframes: clip.keyframes } : {}),
       })),
     })),
     playheadFrame: secondsToFrames(playhead, projectFrameRate),
@@ -492,7 +522,7 @@ function Editor() {
       const scale = Math.min(canvas.width / width, canvas.height / height)
       const drawWidth = width * scale
       const drawHeight = height * scale
-      const effects = clip.effects ?? DEFAULT_CLIP_EFFECTS
+      const effects = evaluateClipEffects(clip.effects ?? DEFAULT_CLIP_EFFECTS, clip.keyframes, secondsToFrames(Math.max(0, playhead - clip.start), projectFrameRate))
       context.save()
       context.globalAlpha = effects.opacity / 100
       context.filter = `brightness(${effects.brightness}%) contrast(${effects.contrast}%) saturate(${effects.saturation}%) blur(${effects.blur}px) grayscale(${effects.grayscale}%) sepia(${effects.sepia}%) hue-rotate(${effects.hueRotate}deg)`
@@ -605,7 +635,7 @@ function Editor() {
       setAssets(restoredAssets)
       setTracks(manifest.tracks.map((track) => ({
         id: track.id, name: track.name, kind: track.kind, muted: Boolean(track.muted), locked: Boolean(track.locked),
-        clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, start: framesToSeconds(clip.timelineStartFrame, frameRate), sourceIn: framesToSeconds(clip.sourceInFrame, frameRate), duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled })),
+        clips: track.clips.map((clip) => ({ id: clip.id, mediaId: clip.mediaId, start: framesToSeconds(clip.timelineStartFrame, frameRate), sourceIn: framesToSeconds(clip.sourceInFrame, frameRate), duration: framesToSeconds(clip.durationFrames, frameRate), enabled: clip.enabled, effects: clip.effects, keyframes: clip.keyframes })),
       })))
       setProjectId(manifest.id ?? createId())
       setProjectName(manifest.name || file.name.replace('.kcx1', ''))
@@ -746,13 +776,13 @@ function Editor() {
               <label className="kx-field"><span>Grayscale · {selectedEffects.grayscale}%</span><input type="range" min="0" max="100" value={selectedEffects.grayscale} onChange={(event) => updateEffect({ grayscale: Number(event.target.value) })} /></label>
               <label className="kx-field"><span>Sepia · {selectedEffects.sepia}%</span><input type="range" min="0" max="100" value={selectedEffects.sepia} onChange={(event) => updateEffect({ sepia: Number(event.target.value) })} /></label>
               <label className="kx-field"><span>Hue rotation · {selectedEffects.hueRotate}°</span><input type="range" min="0" max="360" value={selectedEffects.hueRotate} onChange={(event) => updateEffect({ hueRotate: Number(event.target.value) })} /></label>
-              <label className="kx-field"><span>Opacity · {selectedEffects.opacity}%</span><input type="range" min="0" max="100" value={selectedEffects.opacity} onChange={(event) => updateEffect({ opacity: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Opacity · {selectedEffects.opacity}% <button type="button" className="kx-keyframe-button" title="Add or update opacity keyframe" onClick={() => addKeyframe('opacity')}>{selectedClip.keyframes?.some((keyframe) => keyframe.frame === selectedFrame && keyframe.property === 'opacity') ? '◆' : '◇'}</button></span><input type="range" min="0" max="100" value={selectedEffects.opacity} onChange={(event) => updateEffect({ opacity: Number(event.target.value) })} /></label>
               <div className="kx-section-label">TRANSFORM</div>
-              <label className="kx-field"><span>Position X · {selectedEffects.positionX}%</span><input type="range" min="-100" max="100" value={selectedEffects.positionX} onChange={(event) => updateEffect({ positionX: Number(event.target.value) })} /></label>
-              <label className="kx-field"><span>Position Y · {selectedEffects.positionY}%</span><input type="range" min="-100" max="100" value={selectedEffects.positionY} onChange={(event) => updateEffect({ positionY: Number(event.target.value) })} /></label>
-              <label className="kx-field"><span>Scale X · {selectedEffects.scaleX.toFixed(2)}×</span><input type="range" min="0.1" max="5" step="0.01" value={selectedEffects.scaleX} onChange={(event) => updateEffect({ scaleX: Number(event.target.value) })} /></label>
-              <label className="kx-field"><span>Scale Y · {selectedEffects.scaleY.toFixed(2)}×</span><input type="range" min="0.1" max="5" step="0.01" value={selectedEffects.scaleY} onChange={(event) => updateEffect({ scaleY: Number(event.target.value) })} /></label>
-              <label className="kx-field"><span>Rotation · {selectedEffects.rotation}°</span><input type="range" min="-180" max="180" value={selectedEffects.rotation} onChange={(event) => updateEffect({ rotation: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Position X · {selectedEffects.positionX}% <button type="button" className="kx-keyframe-button" title="Add or update positionX keyframe" onClick={() => addKeyframe('positionX')}>{selectedClip.keyframes?.some((keyframe) => keyframe.frame === selectedFrame && keyframe.property === 'positionX') ? '◆' : '◇'}</button></span><input type="range" min="-100" max="100" value={selectedEffects.positionX} onChange={(event) => updateEffect({ positionX: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Position Y · {selectedEffects.positionY}% <button type="button" className="kx-keyframe-button" title="Add or update positionY keyframe" onClick={() => addKeyframe('positionY')}>{selectedClip.keyframes?.some((keyframe) => keyframe.frame === selectedFrame && keyframe.property === 'positionY') ? '◆' : '◇'}</button></span><input type="range" min="-100" max="100" value={selectedEffects.positionY} onChange={(event) => updateEffect({ positionY: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Scale X · {selectedEffects.scaleX.toFixed(2)}× <button type="button" className="kx-keyframe-button" title="Add or update scaleX keyframe" onClick={() => addKeyframe('scaleX')}>{selectedClip.keyframes?.some((keyframe) => keyframe.frame === selectedFrame && keyframe.property === 'scaleX') ? '◆' : '◇'}</button></span><input type="range" min="0.1" max="5" step="0.01" value={selectedEffects.scaleX} onChange={(event) => updateEffect({ scaleX: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Scale Y · {selectedEffects.scaleY.toFixed(2)}× <button type="button" className="kx-keyframe-button" title="Add or update scaleY keyframe" onClick={() => addKeyframe('scaleY')}>{selectedClip.keyframes?.some((keyframe) => keyframe.frame === selectedFrame && keyframe.property === 'scaleY') ? '◆' : '◇'}</button></span><input type="range" min="0.1" max="5" step="0.01" value={selectedEffects.scaleY} onChange={(event) => updateEffect({ scaleY: Number(event.target.value) })} /></label>
+              <label className="kx-field"><span>Rotation · {selectedEffects.rotation}° <button type="button" className="kx-keyframe-button" title="Add or update rotation keyframe" onClick={() => addKeyframe('rotation')}>{selectedClip.keyframes?.some((keyframe) => keyframe.frame === selectedFrame && keyframe.property === 'rotation') ? '◆' : '◇'}</button></span><input type="range" min="-180" max="180" value={selectedEffects.rotation} onChange={(event) => updateEffect({ rotation: Number(event.target.value) })} /></label>
               <button onClick={() => updateSelectedClip({ effects: { ...DEFAULT_CLIP_EFFECTS } })}>Reset effects</button>
             </> : <div className="kx-empty-small"><WandSparkles size={22} /><span>Select a video or image clip to edit its live effects.</span></div>}
           </div>}
@@ -777,7 +807,7 @@ function Editor() {
             <div className="kx-preview-stage">
               {activeVisualClips.length > 0 ? [...activeVisualClips].reverse().map(({ clip }) => {
                 const asset = assets.find((item) => item.id === clip.mediaId)
-                const effects = clip.effects ?? DEFAULT_CLIP_EFFECTS
+                const effects = evaluateClipEffects(clip.effects ?? DEFAULT_CLIP_EFFECTS, clip.keyframes, secondsToFrames(Math.max(0, playhead - clip.start), projectFrameRate))
                 const filter = `brightness(${effects.brightness}%) contrast(${effects.contrast}%) saturate(${effects.saturation}%) blur(${effects.blur}px) grayscale(${effects.grayscale}%) sepia(${effects.sepia}%) hue-rotate(${effects.hueRotate}deg)`
                 if (!asset?.url) return <div className="kx-preview-offline" key={clip.id}><FolderOpen size={20} /> {asset?.name ?? 'MEDIA OFFLINE'} — RELINK SOURCE</div>
                 const layerIndex = activeVisualClips.findIndex((item) => item.clip.id === clip.id)
